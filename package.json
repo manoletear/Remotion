@@ -1,0 +1,24 @@
+{
+  "name": "gsm-gate-access-layer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Access management layer for condominiums using GSM RTU gate openers. Permiso -> Activacion -> Dispositivo.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx \"src/**/*.test.ts\"",
+    "demo": "tsx ./src/demo.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
