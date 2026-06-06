@@ -5,6 +5,9 @@
 -- TypeScript layer does. Slot uniqueness per device guarantees a deterministic
 -- RTU phonebook position for every active invitation.
 
+-- Required for gen_random_uuid() on older Postgres; a no-op where it is built in.
+create extension if not exists pgcrypto;
+
 -- ---------------------------------------------------------------------------
 -- Enums
 -- ---------------------------------------------------------------------------
@@ -63,7 +66,9 @@ create table dispositivos (
   tipo          device_type not null default 'RTU5024',
   numero_sim    text not null,
   estado        device_status not null default 'UNKNOWN',
-  password      text not null default '1234',
+  -- No default: each device's command password must be supplied explicitly at
+  -- provisioning time (avoids a shared weak default in the DB).
+  password      text not null,
   created_at    timestamptz not null default now()
 );
 create index dispositivos_condominio_idx on dispositivos (condominio_id);

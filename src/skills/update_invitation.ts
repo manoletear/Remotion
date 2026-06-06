@@ -1,5 +1,6 @@
 import type { Invitation } from "../domain/invitation/index.js";
 import { isLoadedOnDevice } from "../domain/invitation/index.js";
+import type { InvitationPatch } from "../mcp/supabase/port.js";
 import { EntityType, EventType, InvitationStatus } from "../shared/enums.js";
 import { NotFoundError, ValidationError } from "../shared/errors.js";
 import { Validator, validateValidityWindow } from "../shared/validators.js";
@@ -29,6 +30,9 @@ export async function updateInvitation(
   const current = await ctx.store.invitations.get(input.id);
   if (!current) throw new NotFoundError("Invitation", input.id);
 
+  // Only terminal/removing invitations are locked. ERROR is intentionally
+  // editable so a resident can correct a bad number/window and let the next
+  // RETRY succeed (a phone change re-flags PENDING_SYNC below).
   if (
     current.estado === InvitationStatus.REMOVING ||
     current.estado === InvitationStatus.REMOVED
@@ -38,7 +42,7 @@ export async function updateInvitation(
     ]);
   }
 
-  const patch: Partial<Invitation> = {};
+  const patch: InvitationPatch = {};
   const v = new Validator();
 
   if (input.visitante_nombre !== undefined) {

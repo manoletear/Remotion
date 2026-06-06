@@ -47,12 +47,33 @@ export interface DeviceRepository {
   getForProperty(propiedadId: string): Promise<Device | null>;
 }
 
+/**
+ * Fields of an invitation that may change after creation. Excludes invariants
+ * (`id`, `propiedad_id`, `created_at`, visitor identity is editable but the row
+ * identity is not) so the state-machine contract can't be bypassed by a stray
+ * write to an immutable column.
+ */
+export type InvitationPatch = Partial<
+  Pick<
+    Invitation,
+    | "estado"
+    | "cancelled"
+    | "rtu_slot"
+    | "sync_attempts"
+    | "last_error"
+    | "visitante_nombre"
+    | "visitante_telefono"
+    | "fecha_inicio"
+    | "fecha_fin"
+  >
+>;
+
 export interface InvitationRepository {
   create(input: NewInvitation): Promise<Invitation>;
   get(id: string): Promise<Invitation | null>;
   listByProperty(propiedadId: string): Promise<Invitation[]>;
-  /** Persist a partial update and return the new row. */
-  update(id: string, patch: Partial<Invitation>): Promise<Invitation>;
+  /** Persist a partial update of mutable fields and return the new row. */
+  update(id: string, patch: InvitationPatch): Promise<Invitation>;
   /** Invitations currently in the given status (for the scheduler to act on). */
   listByStatus(status: InvitationStatus): Promise<Invitation[]>;
   /** Slots already taken on a device, to assign a fresh one. */

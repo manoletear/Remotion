@@ -38,6 +38,11 @@ export function normalizePhone(
   return PHONE_E164_REGEX.test(cleaned) ? cleaned : null;
 }
 
+/** True when `phone` is a well-formed E.164 number. */
+export function isValidE164(phone: string): boolean {
+  return PHONE_E164_REGEX.test(phone);
+}
+
 /** Sleep helper for backoff loops. */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

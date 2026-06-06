@@ -20,7 +20,7 @@ import {
   type InvitationStatus,
 } from "../../shared/enums.js";
 import { RTU5024 } from "../../shared/constants.js";
-import type { DataStore } from "./port.js";
+import type { DataStore, InvitationPatch } from "./port.js";
 
 /** Physical table names. Kept in one place and mirrored by the SQL migration. */
 const TABLES = {
@@ -46,6 +46,16 @@ function many<T>(res: { data: T[] | null; error: { message: string } | null }): 
 }
 
 /**
+ * Unwrap a Supabase maybe-single response: throw on a real DB/query error,
+ * return null only when the row genuinely does not exist. Without this, a failed
+ * query would be silently misread as "not found".
+ */
+function maybeOne<T>(res: { data: T | null; error: { message: string } | null }): T | null {
+  if (res.error) throw new Error(res.error.message);
+  return res.data;
+}
+
+/**
  * Supabase-backed implementation of the persistence port. Construct it with a
  * configured `SupabaseClient` (service-role key on the server). Implements the
  * exact same `DataStore` contract the in-memory store does.
@@ -63,7 +73,7 @@ export class SupabaseDataStore implements DataStore {
           .single(),
       ),
     get: async (id: string): Promise<Condominium | null> =>
-      (await this.db.from(TABLES.condominiums).select().eq("id", id).maybeSingle()).data,
+      maybeOne(await this.db.from(TABLES.condominiums).select().eq("id", id).maybeSingle()),
     list: async (): Promise<Condominium[]> =>
       many(await this.db.from(TABLES.condominiums).select()),
   };
@@ -72,7 +82,7 @@ export class SupabaseDataStore implements DataStore {
     create: async (input: NewProperty): Promise<Property> =>
       single(await this.db.from(TABLES.properties).insert(input).select().single()),
     get: async (id: string): Promise<Property | null> =>
-      (await this.db.from(TABLES.properties).select().eq("id", id).maybeSingle()).data,
+      maybeOne(await this.db.from(TABLES.properties).select().eq("id", id).maybeSingle()),
     listByCondominium: async (condominioId: string): Promise<Property[]> =>
       many(await this.db.from(TABLES.properties).select().eq("condominio_id", condominioId)),
   };
@@ -81,7 +91,7 @@ export class SupabaseDataStore implements DataStore {
     create: async (input: NewResident): Promise<Resident> =>
       single(await this.db.from(TABLES.residents).insert(input).select().single()),
     get: async (id: string): Promise<Resident | null> =>
-      (await this.db.from(TABLES.residents).select().eq("id", id).maybeSingle()).data,
+      maybeOne(await this.db.from(TABLES.residents).select().eq("id", id).maybeSingle()),
     listByProperty: async (propiedadId: string): Promise<Resident[]> =>
       many(await this.db.from(TABLES.residents).select().eq("propiedad_id", propiedadId)),
   };
@@ -102,20 +112,20 @@ export class SupabaseDataStore implements DataStore {
           .single(),
       ),
     get: async (id: string): Promise<Device | null> =>
-      (await this.db.from(TABLES.devices).select().eq("id", id).maybeSingle()).data,
+      maybeOne(await this.db.from(TABLES.devices).select().eq("id", id).maybeSingle()),
     getForProperty: async (propiedadId: string): Promise<Device | null> => {
-      const property = (
-        await this.db.from(TABLES.properties).select("condominio_id").eq("id", propiedadId).maybeSingle()
-      ).data as { condominio_id: string } | null;
+      const property = maybeOne<{ condominio_id: string }>(
+        await this.db.from(TABLES.properties).select("condominio_id").eq("id", propiedadId).maybeSingle(),
+      );
       if (!property) return null;
-      return (
+      return maybeOne(
         await this.db
           .from(TABLES.devices)
           .select()
           .eq("condominio_id", property.condominio_id)
           .limit(1)
-          .maybeSingle()
-      ).data;
+          .maybeSingle(),
+      );
     },
   };
 
@@ -123,10 +133,10 @@ export class SupabaseDataStore implements DataStore {
     create: async (input: NewInvitation): Promise<Invitation> =>
       single(await this.db.from(TABLES.invitations).insert(input).select().single()),
     get: async (id: string): Promise<Invitation | null> =>
-      (await this.db.from(TABLES.invitations).select().eq("id", id).maybeSingle()).data,
+      maybeOne(await this.db.from(TABLES.invitations).select().eq("id", id).maybeSingle()),
     listByProperty: async (propiedadId: string): Promise<Invitation[]> =>
       many(await this.db.from(TABLES.invitations).select().eq("propiedad_id", propiedadId)),
-    update: async (id: string, patch: Partial<Invitation>): Promise<Invitation> =>
+    update: async (id: string, patch: InvitationPatch): Promise<Invitation> =>
       single(
         await this.db
           .from(TABLES.invitations)
@@ -138,9 +148,9 @@ export class SupabaseDataStore implements DataStore {
     listByStatus: async (status: InvitationStatus): Promise<Invitation[]> =>
       many(await this.db.from(TABLES.invitations).select().eq("estado", status)),
     occupiedSlots: async (deviceId: string): Promise<number[]> => {
-      const device = (
-        await this.db.from(TABLES.devices).select("condominio_id").eq("id", deviceId).maybeSingle()
-      ).data as { condominio_id: string } | null;
+      const device = maybeOne<{ condominio_id: string }>(
+        await this.db.from(TABLES.devices).select("condominio_id").eq("id", deviceId).maybeSingle(),
+      );
       if (!device) return [];
       const props = many<{ id: string }>(
         await this.db.from(TABLES.properties).select("id").eq("condominio_id", device.condominio_id),

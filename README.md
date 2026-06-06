@@ -24,7 +24,7 @@ hardware required.
 
 ## Project layout
 
-```
+```text
 src/
   domain/         entities + invitation state machine
   skills/         use-cases (create/activate/expire/cancel invitation, rtu_*, audit, provisioning)

@@ -26,24 +26,38 @@ export async function tick(ctx: SkillContext, now: Date = ctx.now()): Promise<Ti
 
   for (const job of due) {
     report.processed++;
-    switch (job.kind) {
-      case "ACTIVATION": {
-        await activateInvitation(ctx, job.invitationId);
-        report.activated++;
-        break;
+    // Isolate each job: one failing invitation must not block the rest of the
+    // batch. RTU failures already land in ERROR with an audit trail and a
+    // scheduled RETRY; here we guard against unexpected throws (e.g. NotFound).
+    try {
+      switch (job.kind) {
+        case "ACTIVATION": {
+          await activateInvitation(ctx, job.invitationId);
+          report.activated++;
+          break;
+        }
+        case "EXPIRATION": {
+          await expireInvitation(ctx, job.invitationId);
+          report.expired++;
+          break;
+        }
+        case "RETRY": {
+          await retry(ctx, job.invitationId);
+          report.retried++;
+          break;
+        }
+        default: {
+          // eslint-disable-next-line no-console
+          console.warn(`Unknown job kind: ${job.kind} (${job.invitationId})`);
+          break;
+        }
       }
-      case "EXPIRATION": {
-        await expireInvitation(ctx, job.invitationId);
-        report.expired++;
-        break;
-      }
-      case "RETRY": {
-        await retry(ctx, job.invitationId);
-        report.retried++;
-        break;
-      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(`Lifecycle job ${job.id} (${job.invitationId}) failed:`, error);
+    } finally {
+      await ctx.scheduler.complete(job.id);
     }
-    await ctx.scheduler.complete(job.id);
   }
 
   return report;

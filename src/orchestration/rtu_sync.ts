@@ -12,6 +12,7 @@ import {
   RtuOperation,
   RtuResultStatus,
 } from "../shared/enums.js";
+import type { InvitationPatch } from "../mcp/supabase/port.js";
 import { NotFoundError, RtuSyncError } from "../shared/errors.js";
 import { withRetry } from "../shared/utils.js";
 import { auditEvent } from "../skills/audit_event.js";
@@ -25,7 +26,7 @@ async function transition(
   ctx: SkillContext,
   inv: Invitation,
   to: InvitationStatus,
-  patch: Partial<Invitation> = {},
+  patch: InvitationPatch = {},
 ): Promise<Invitation> {
   assertTransition(inv.estado, to);
   return ctx.store.invitations.update(inv.id, { ...patch, estado: to });
@@ -79,6 +80,7 @@ export async function syncAddAccess(
   }
 
   const slot = inv.rtu_slot ?? (await assignSlot(ctx, device));
+  const visitorPhone = inv.visitante_telefono;
 
   await auditEvent(ctx, {
     tipo: EventType.RTU_SYNC_STARTED,
@@ -92,7 +94,7 @@ export async function syncAddAccess(
       async () => {
         const r = await rtuAddUser(ctx, {
           device,
-          phone: inv!.visitante_telefono,
+          phone: visitorPhone,
           slot,
         });
         if (r.status !== RtuResultStatus.SUCCESS) {
@@ -215,8 +217,9 @@ async function failSync(
   error: unknown,
 ): Promise<Invitation> {
   const message = error instanceof Error ? error.message : String(error);
-  const updated = await ctx.store.invitations.update(inv.id, {
-    estado: InvitationStatus.ERROR,
+  // ERROR is reached only from PENDING_SYNC (add) or REMOVING (remove); route
+  // through transition() so the state-machine invariant is validated.
+  const updated = await transition(ctx, inv, InvitationStatus.ERROR, {
     sync_attempts: inv.sync_attempts + 1,
     last_error: message,
   });

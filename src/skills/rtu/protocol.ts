@@ -7,19 +7,23 @@
  * heart of the "RTU as infrastructure adapter" boundary.
  */
 import { RtuResultStatus } from "../../shared/enums.js";
+import { assertRtuPassword } from "../../shared/validators.js";
 
 /** Build the command to authorize a phone number at a phonebook slot. */
 export function buildAddUserCommand(password: string, slot: number, phone: string): string {
+  assertRtuPassword(password);
   return `${password}A${pad(slot)}#${phone}#`;
 }
 
 /** Build the command to delete the authorized number at a slot. */
 export function buildRemoveUserCommand(password: string, slot: number): string {
+  assertRtuPassword(password);
   return `${password}A${pad(slot)}##`;
 }
 
 /** Build the command to list authorized numbers. */
 export function buildQueryCommand(password: string): string {
+  assertRtuPassword(password);
   return `${password}AL#`;
 }
 

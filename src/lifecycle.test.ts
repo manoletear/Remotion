@@ -12,6 +12,9 @@ import { normalizePhone } from "./shared/utils.js";
 import { cancelInvitation } from "./skills/cancel_invitation.js";
 import { makeContext, type SkillContext } from "./skills/context.js";
 import { createInvitation } from "./skills/create_invitation.js";
+import { expireInvitation } from "./skills/expire_invitation.js";
+import { buildAddUserCommand } from "./skills/rtu/protocol.js";
+import { rtuAddUser } from "./skills/rtu_add_user.js";
 import {
   registerCondominium,
   registerDevice,
@@ -211,6 +214,39 @@ test("cancellation whose removal fails retries toward removal, never re-adds", a
     (m) => !m.body.includes("AL#") && !m.body.endsWith("##"),
   );
   assert.equal(addCommands.length, 1);
+});
+
+test("RTU command builder rejects passwords with protocol delimiters", () => {
+  assert.throws(() => buildAddUserCommand("12#4", 100, "+56911112222"), /RTU password/);
+  assert.throws(() => buildAddUserCommand("A234", 100, "+56911112222"), /RTU password/);
+  assert.equal(buildAddUserCommand("1234", 100, "+56911112222"), "1234A100#+56911112222#");
+});
+
+test("rtuAddUser rejects a non-E.164 phone", async () => {
+  const { ctx, store, propertyId } = await setup();
+  const device = (await store.devices.getForProperty(propertyId))!;
+  await assert.rejects(rtuAddUser(ctx, { device, phone: "12345", slot: 100 }), /Invalid phone/);
+});
+
+test("expireInvitation is idempotent", async () => {
+  const { ctx, store, propertyId } = await setup();
+  const w = window();
+  const inv = await createInvitation(ctx, {
+    propiedad_id: propertyId,
+    visitante_nombre: "Visitor",
+    visitante_telefono: "+56911112222",
+    fecha_inicio: w.fecha_inicio,
+    fecha_fin: w.fecha_fin,
+  });
+  await tick(ctx, w.start); // ACTIVE
+  const first = await expireInvitation(ctx, inv.id);
+  assert.equal(first.estado, InvitationStatus.REMOVED);
+  const second = await expireInvitation(ctx, inv.id); // no throw, still REMOVED
+  assert.equal(second.estado, InvitationStatus.REMOVED);
+  // No INVITATION_EXPIRED duplicate: exactly one in the audit trail.
+  const events = await store.events.listForEntity(inv.id, 100);
+  const expiredCount = events.filter((e) => e.tipo === "INVITATION_EXPIRED").length;
+  assert.equal(expiredCount, 1);
 });
 
 test("invalid validity window is rejected", async () => {

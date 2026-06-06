@@ -1,6 +1,23 @@
 import { ValidationError } from "./errors.js";
 import { isNonEmptyString, normalizePhone } from "./utils.js";
 
+/**
+ * RTU5024 command passwords are numeric (4-8 digits). Enforcing this prevents a
+ * password containing protocol framing characters (`#`, command letters like
+ * `A`) from being concatenated into an SMS command and producing an unintended
+ * device instruction.
+ */
+const RTU_PASSWORD_REGEX = /^\d{4,8}$/;
+
+/** Throw {@link ValidationError} if a device password is not RTU5024-safe. */
+export function assertRtuPassword(password: string): void {
+  if (!RTU_PASSWORD_REGEX.test(password)) {
+    throw new ValidationError("Invalid RTU password", [
+      "password must be 4-8 digits (no protocol delimiters)",
+    ]);
+  }
+}
+
 /** Accumulates validation issues and throws a single {@link ValidationError}. */
 export class Validator {
   private readonly issues: string[] = [];

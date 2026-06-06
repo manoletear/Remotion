@@ -16,7 +16,15 @@ export async function cancelInvitation(
 ): Promise<Invitation> {
   const inv = await ctx.store.invitations.get(invitationId);
   if (!inv) throw new NotFoundError("Invitation", invitationId);
-  if (inv.estado === InvitationStatus.REMOVED) return inv;
+  // Idempotent: a removal already finished (REMOVED) or in flight (REMOVING)
+  // needs no further action. ERROR is allowed to proceed because ERROR -> REMOVING
+  // is a valid transition and re-drives the removal.
+  if (
+    inv.estado === InvitationStatus.REMOVED ||
+    inv.estado === InvitationStatus.REMOVING
+  ) {
+    return inv;
+  }
 
   await ctx.scheduler.cancel(inv.id);
   // Mark intent so a failed removal is re-driven toward removal, not re-added.

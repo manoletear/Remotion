@@ -47,11 +47,13 @@ export async function createInvitation(
     fecha_fin: end.toISOString(),
   });
 
+  // Avoid storing the visitor phone (PII) in the audit trail; the invitation
+  // row already holds it under access control.
   await auditEvent(ctx, {
     tipo: EventType.INVITATION_CREATED,
     entidad: EntityType.INVITATION,
     entidad_id: invitation.id,
-    payload: { propiedad_id: invitation.propiedad_id, visitante_telefono: phone },
+    payload: { propiedad_id: invitation.propiedad_id },
   });
 
   await ctx.scheduler.schedule("ACTIVATION", invitation.id, start);

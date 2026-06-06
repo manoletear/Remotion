@@ -29,14 +29,27 @@ export class TwilioSmsGateway implements SmsGatewayPort {
   async send(to: string, body: string): Promise<SmsSendResult> {
     const url = `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Messages.json`;
     const auth = Buffer.from(`${this.config.accountSid}:${this.config.authToken}`).toString("base64");
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ To: to, From: this.config.from, Body: body }),
-    });
+
+    // Bound the request so a stalled network can't hang lifecycle processing.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RTU_ACK_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ To: to, From: this.config.from, Body: body }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return { messageId: "", status: "failed", ...{ detail } } as SmsSendResult;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) {
       const detail = await res.text();
       return { messageId: "", status: "failed", ...{ detail } } as SmsSendResult;

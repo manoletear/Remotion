@@ -1,5 +1,7 @@
 import type { Device } from "../domain/device/index.js";
 import { RTU_ACK_TIMEOUT_MS } from "../shared/constants.js";
+import { ValidationError } from "../shared/errors.js";
+import { isValidE164 } from "../shared/utils.js";
 import { buildQueryCommand, queryReplyContains } from "./rtu/protocol.js";
 import type { RtuResult } from "./rtu/types.js";
 import type { SkillContext } from "./context.js";
@@ -19,6 +21,11 @@ export async function rtuQueryUser(
   ctx: SkillContext,
   input: RtuQueryUserInput,
 ): Promise<RtuResult> {
+  if (!isValidE164(input.phone)) {
+    throw new ValidationError("Invalid phone for RTU query", [
+      `not E.164: ${input.phone}`,
+    ]);
+  }
   const command = buildQueryCommand(input.device.password);
   const reply = await ctx.sms.sendAndAwaitReply(
     input.device.numero_sim,

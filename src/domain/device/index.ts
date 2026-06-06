@@ -8,7 +8,11 @@ export interface Device {
   /** SIM phone number the device listens on (E.164). */
   numero_sim: string;
   estado: DeviceStatus;
-  /** Command password configured on the device. */
+  /**
+   * Command password configured on the device. Stored in plaintext because the
+   * RTU5024 SMS protocol requires sending it in commands. This is a device
+   * configuration secret (not user credentials); protect it at the DB layer.
+   */
   password: string;
   created_at: string;
 }

@@ -16,8 +16,16 @@ export async function expireInvitation(
 ): Promise<Invitation> {
   const inv = await ctx.store.invitations.get(invitationId);
   if (!inv) throw new NotFoundError("Invitation", invitationId);
-  if (inv.estado === InvitationStatus.REMOVED) return inv;
+  // Idempotent: nothing to do if already finalized or a removal is in flight.
+  if (
+    inv.estado === InvitationStatus.REMOVED ||
+    inv.estado === InvitationStatus.EXPIRED ||
+    inv.estado === InvitationStatus.REMOVING
+  ) {
+    return inv;
+  }
 
+  // The EXPIRED milestone only applies when the access was actually loaded.
   if (inv.estado === InvitationStatus.ACTIVE) {
     await ctx.store.invitations.update(inv.id, { estado: InvitationStatus.EXPIRED });
   }

@@ -4,14 +4,16 @@ import type { Property } from "../domain/property/index.js";
 import type { Resident } from "../domain/resident/index.js";
 import { DeviceType, EntityType, EventType } from "../shared/enums.js";
 import { NotFoundError } from "../shared/errors.js";
-import { Validator } from "../shared/validators.js";
+import { assertRtuPassword, Validator } from "../shared/validators.js";
 import { auditEvent } from "./audit_event.js";
 import type { SkillContext } from "./context.js";
 
 /**
  * Administrative provisioning skills used by the Administracion view: register
- * condominiums, properties, permanent residents and RTU devices. Each emits its
- * auditable event so the bitacora reflects setup changes too.
+ * condominiums, properties, permanent residents and RTU devices. Property,
+ * resident and device registration each emit their auditable event
+ * (PROPERTY_CREATED / USER_CREATED / DEVICE_REGISTERED). Condominium creation
+ * has no dedicated event in the documented catalog, so it is not audited here.
  */
 
 export async function registerCondominium(
@@ -65,6 +67,8 @@ export async function registerResident(
     nombre: input.nombre.trim(),
     telefono: phone!,
   });
+  // USER_CREATED is the resident lifecycle event (a resident is the permanent
+  // authorized user of a property); entidad: RESIDENT disambiguates it.
   await auditEvent(ctx, {
     tipo: EventType.USER_CREATED,
     entidad: EntityType.RESIDENT,
@@ -87,6 +91,7 @@ export async function registerDevice(
   v.requireNonEmpty(input.condominio_id, "condominio_id");
   const sim = v.phone(input.numero_sim, "numero_sim");
   v.throwIfInvalid();
+  if (input.password !== undefined) assertRtuPassword(input.password);
 
   const condominium = await ctx.store.condominiums.get(input.condominio_id);
   if (!condominium) throw new NotFoundError("Condominium", input.condominio_id);

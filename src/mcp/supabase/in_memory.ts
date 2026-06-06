@@ -19,7 +19,7 @@ import {
 } from "../../shared/enums.js";
 import { RTU5024 } from "../../shared/constants.js";
 import { newId, nowIso } from "../../shared/utils.js";
-import type { DataStore } from "./port.js";
+import type { DataStore, InvitationPatch } from "./port.js";
 
 /**
  * In-memory implementation of the persistence port. Used by tests and the
@@ -134,7 +134,7 @@ export class InMemoryDataStore implements DataStore {
     get: async (id: string) => this._invitations.get(id) ?? null,
     listByProperty: async (propiedadId: string) =>
       [...this._invitations.values()].filter((i) => i.propiedad_id === propiedadId),
-    update: async (id: string, patch: Partial<Invitation>): Promise<Invitation> => {
+    update: async (id: string, patch: InvitationPatch): Promise<Invitation> => {
       const current = this._invitations.get(id);
       if (!current) throw new Error(`Invitation not found: ${id}`);
       const next: Invitation = { ...current, ...patch, updated_at: nowIso() };

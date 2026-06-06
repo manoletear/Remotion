@@ -10,7 +10,7 @@ top of the gate that is already installed.
 
 The system is **not** built around the RTU. It is built around:
 
-```
+```text
 PERMISO  ->  ACTIVACION  ->  DISPOSITIVO
 (permission)  (activation)   (device)
 ```
@@ -42,7 +42,7 @@ immutable audit record.
 
 ## Invitation state machine
 
-```
+```text
 CREATED ─► PENDING_SYNC ─► ACTIVE ─► EXPIRED ─► REMOVING ─► REMOVED
    │            │            │                     ▲
    │            ▼            └─────────────────────┘ (early cancel)
