@@ -24,7 +24,10 @@ function fakeRtu(_to: string, body: string): string {
   return "Add success";
 }
 
-async function setup(replyFn = fakeRtu): Promise<{
+async function setup(
+  replyFn = fakeRtu,
+  opts: { verifyAfterSync?: boolean } = {},
+): Promise<{
   ctx: SkillContext;
   sms: FakeSmsGateway;
   store: InMemoryDataStore;
@@ -38,6 +41,7 @@ async function setup(replyFn = fakeRtu): Promise<{
     scheduler: new InMemoryScheduler(),
     notifier: new ConsoleNotifier(),
     syncRetry: { maxAttempts: 4, baseMs: 1 }, // fast backoff for tests
+    verifyAfterSync: opts.verifyAfterSync ?? false,
   });
   const condo = await registerCondominium(ctx, { nombre: "Test" });
   const property = await registerProperty(ctx, { condominio_id: condo.id, numero: "1" });
@@ -123,6 +127,90 @@ test("cancel before activation closes out without touching device", async () => 
   const cancelled = await cancelInvitation(ctx, inv.id);
   assert.equal(cancelled.estado, InvitationStatus.REMOVED);
   assert.equal(sms.outbox.length, 0); // never loaded -> no SMS
+});
+
+test("failed add schedules a RETRY that later recovers to ACTIVE", async () => {
+  let healthy = false;
+  const reply = (_to: string, body: string): string => {
+    if (body.includes("AL#")) return "list: 100:+56911112222";
+    if (body.endsWith("##")) return "Delete success";
+    return healthy ? "Add success" : "ERROR: device unreachable";
+  };
+  const { ctx, store, propertyId } = await setup(reply);
+  const w = window();
+  const inv = await createInvitation(ctx, {
+    propiedad_id: propertyId,
+    visitante_nombre: "Visitor",
+    visitante_telefono: "+56911112222",
+    fecha_inicio: w.fecha_inicio,
+    fecha_fin: w.fecha_fin,
+  });
+
+  await tick(ctx, w.start); // activation fails -> ERROR + scheduled RETRY
+  assert.equal((await store.invitations.get(inv.id))!.estado, InvitationStatus.ERROR);
+
+  healthy = true; // device recovers
+  const retryAt = new Date(w.start.getTime() + 6 * 60_000); // past the 5-min RETRY delay
+  await tick(ctx, retryAt);
+
+  const recovered = (await store.invitations.get(inv.id))!;
+  assert.equal(recovered.estado, InvitationStatus.ACTIVE);
+  assert.equal(recovered.rtu_slot, 100);
+});
+
+test("verifyAfterSync drives to ERROR when the device does not confirm", async () => {
+  const reply = (_to: string, body: string): string => {
+    if (body.includes("AL#")) return "list: 100:+56999999999"; // a different number
+    return "Add success";
+  };
+  const { ctx, store, propertyId } = await setup(reply, { verifyAfterSync: true });
+  const w = window();
+  const inv = await createInvitation(ctx, {
+    propiedad_id: propertyId,
+    visitante_nombre: "Visitor",
+    visitante_telefono: "+56911112222",
+    fecha_inicio: w.fecha_inicio,
+    fecha_fin: w.fecha_fin,
+  });
+  await tick(ctx, w.start);
+  const after = (await store.invitations.get(inv.id))!;
+  assert.equal(after.estado, InvitationStatus.ERROR);
+  assert.match(after.last_error ?? "", /not confirmed/);
+});
+
+test("cancellation whose removal fails retries toward removal, never re-adds", async () => {
+  let removeOk = false;
+  const reply = (_to: string, body: string): string => {
+    if (body.includes("AL#")) return "list: 100:+56911112222";
+    if (body.endsWith("##")) return removeOk ? "Delete success" : "ERROR";
+    return "Add success";
+  };
+  const { ctx, store, sms, propertyId } = await setup(reply);
+  const w = window();
+  const inv = await createInvitation(ctx, {
+    propiedad_id: propertyId,
+    visitante_nombre: "Visitor",
+    visitante_telefono: "+56911112222",
+    fecha_inicio: w.fecha_inicio,
+    fecha_fin: w.fecha_fin,
+  });
+  await tick(ctx, w.start); // ACTIVE on slot 100
+
+  await cancelInvitation(ctx, inv.id); // removal fails -> ERROR, cancelled=true
+  const errored = (await store.invitations.get(inv.id))!;
+  assert.equal(errored.estado, InvitationStatus.ERROR);
+  assert.equal(errored.cancelled, true);
+
+  removeOk = true;
+  await tick(ctx, new Date(w.start.getTime() + 6 * 60_000)); // RETRY -> removal
+  const removed = (await store.invitations.get(inv.id))!;
+  assert.equal(removed.estado, InvitationStatus.REMOVED);
+
+  // Exactly one add command was ever sent; the retry re-drove removal, not add.
+  const addCommands = sms.outbox.filter(
+    (m) => !m.body.includes("AL#") && !m.body.endsWith("##"),
+  );
+  assert.equal(addCommands.length, 1);
 });
 
 test("invalid validity window is rejected", async () => {

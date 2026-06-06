@@ -24,12 +24,18 @@ export interface SkillContext {
   now: () => Date;
   /** RTU retry policy. Defaults to the production 2s/4s/8s/16s backoff. */
   syncRetry: SyncRetryPolicy;
+  /**
+   * When true, an add is confirmed by querying the device's authorized list
+   * (RTU Query User) before marking the invitation ACTIVE. Costs an extra SMS
+   * but turns the heuristic add-reply into a verified state. Defaults to false.
+   */
+  verifyAfterSync: boolean;
 }
 
 /** Build a context, defaulting the clock and retry policy. */
 export function makeContext(
-  deps: Omit<SkillContext, "now" | "syncRetry"> &
-    Partial<Pick<SkillContext, "now" | "syncRetry">>,
+  deps: Omit<SkillContext, "now" | "syncRetry" | "verifyAfterSync"> &
+    Partial<Pick<SkillContext, "now" | "syncRetry" | "verifyAfterSync">>,
 ): SkillContext {
   return {
     now: () => new Date(),
@@ -37,6 +43,7 @@ export function makeContext(
       maxAttempts: RTU_SYNC_RETRY.MAX_ATTEMPTS,
       baseMs: RTU_SYNC_RETRY.BASE_BACKOFF_MS,
     },
+    verifyAfterSync: false,
     ...deps,
   };
 }

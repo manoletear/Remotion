@@ -121,6 +121,7 @@ export class InMemoryDataStore implements DataStore {
         fecha_inicio: input.fecha_inicio,
         fecha_fin: input.fecha_fin,
         estado: InvitationStatus.CREATED,
+        cancelled: false,
         rtu_slot: null,
         sync_attempts: 0,
         last_error: null,

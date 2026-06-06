@@ -4,7 +4,7 @@ import {
   assertTransition,
   canTransition,
 } from "../domain/invitation/index.js";
-import { RTU5024 } from "../shared/constants.js";
+import { RTU5024, RTU_SYNC_RETRY } from "../shared/constants.js";
 import {
   EntityType,
   EventType,
@@ -17,6 +17,7 @@ import { withRetry } from "../shared/utils.js";
 import { auditEvent } from "../skills/audit_event.js";
 import type { SkillContext } from "../skills/context.js";
 import { rtuAddUser } from "../skills/rtu_add_user.js";
+import { rtuQueryUser } from "../skills/rtu_query_user.js";
 import { rtuRemoveUser } from "../skills/rtu_remove_user.js";
 
 /** Persist a validated status transition and return the new row. */
@@ -101,6 +102,17 @@ export async function syncAddAccess(
       },
       ctx.syncRetry,
     );
+
+    // Optionally confirm the operation actually took effect on the device by
+    // reading back its authorized list (the doc's "Confirmar operaciones").
+    if (ctx.verifyAfterSync) {
+      const check = await rtuQueryUser(ctx, { device, phone: inv.visitante_telefono });
+      if (check.status !== RtuResultStatus.SUCCESS) {
+        throw new RtuSyncError(`RTU add not confirmed: ${check.status}`, {
+          reply: check.rawReply,
+        });
+      }
+    }
 
     inv = await transition(ctx, inv, InvitationStatus.ACTIVE, {
       rtu_slot: slot,
@@ -191,7 +203,11 @@ async function closeOut(ctx: SkillContext, inv: Invitation): Promise<Invitation>
   return transition(ctx, removing, InvitationStatus.REMOVED);
 }
 
-/** Record a failed sync: ERROR status, attempt counter, audit event. */
+/**
+ * Record a failed sync: ERROR status, attempt counter, audit event, and — while
+ * under the lifetime cap — schedule a RETRY job so the lifecycle re-drives it
+ * automatically. Past the cap the invitation is left in ERROR for manual review.
+ */
 async function failSync(
   ctx: SkillContext,
   inv: Invitation,
@@ -204,11 +220,28 @@ async function failSync(
     sync_attempts: inv.sync_attempts + 1,
     last_error: message,
   });
+
+  const exhausted = updated.sync_attempts >= RTU_SYNC_RETRY.MAX_LIFETIME_ATTEMPTS;
+  if (!exhausted) {
+    const delay =
+      RTU_SYNC_RETRY.RETRY_JOB_BASE_DELAY_MS * 2 ** (updated.sync_attempts - 1);
+    await ctx.scheduler.schedule(
+      "RETRY",
+      updated.id,
+      new Date(ctx.now().getTime() + delay),
+    );
+  }
+
   await auditEvent(ctx, {
     tipo: EventType.RTU_SYNC_FAILED,
     entidad: EntityType.INVITATION,
     entidad_id: inv.id,
-    payload: { operation, error: message, attempts: updated.sync_attempts },
+    payload: {
+      operation,
+      error: message,
+      attempts: updated.sync_attempts,
+      willRetry: !exhausted,
+    },
   });
   return updated;
 }

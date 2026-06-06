@@ -76,6 +76,7 @@ create table invitaciones (
   fecha_inicio        timestamptz not null,
   fecha_fin           timestamptz not null,
   estado              invitation_status not null default 'CREATED',
+  cancelled           boolean not null default false,
   rtu_slot            integer,
   sync_attempts       integer not null default 0,
   last_error          text,

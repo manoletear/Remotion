@@ -2,6 +2,7 @@ import { InvitationStatus } from "../shared/enums.js";
 import { activateInvitation } from "../skills/activate_invitation.js";
 import type { SkillContext } from "../skills/context.js";
 import { expireInvitation } from "../skills/expire_invitation.js";
+import { syncAddAccess, syncRemoveAccess } from "./rtu_sync.js";
 
 export interface TickReport {
   processed: number;
@@ -48,17 +49,21 @@ export async function tick(ctx: SkillContext, now: Date = ctx.now()): Promise<Ti
   return report;
 }
 
-/** Re-drive an ERROR invitation toward its intended end state. */
+/**
+ * Re-drive an ERROR invitation toward its intended end state. Cancellation or a
+ * past window means the access must be absent (re-drive removal); otherwise it
+ * must be present (re-drive the add). Re-drives the sync engine directly so the
+ * domain milestone events (cancelled/expired) are not emitted twice.
+ */
 async function retry(ctx: SkillContext, invitationId: string): Promise<void> {
   const inv = await ctx.store.invitations.get(invitationId);
   if (!inv || inv.estado !== InvitationStatus.ERROR) return;
 
-  // If the window has ended, the intent is removal; otherwise re-activate.
-  const windowEnded = new Date(inv.fecha_fin) <= ctx.now();
-  if (windowEnded) {
-    await expireInvitation(ctx, invitationId);
+  const mustBeRemoved = inv.cancelled || new Date(inv.fecha_fin) <= ctx.now();
+  if (mustBeRemoved) {
+    await syncRemoveAccess(ctx, invitationId);
   } else {
-    await activateInvitation(ctx, invitationId);
+    await syncAddAccess(ctx, invitationId);
   }
 }
 

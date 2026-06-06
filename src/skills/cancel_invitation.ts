@@ -19,6 +19,8 @@ export async function cancelInvitation(
   if (inv.estado === InvitationStatus.REMOVED) return inv;
 
   await ctx.scheduler.cancel(inv.id);
+  // Mark intent so a failed removal is re-driven toward removal, not re-added.
+  await ctx.store.invitations.update(inv.id, { cancelled: true });
 
   await auditEvent(ctx, {
     tipo: EventType.INVITATION_CANCELLED,

@@ -26,9 +26,18 @@ export const RTU5024 = {
 
 /** Retry policy applied to RTU synchronization attempts. */
 export const RTU_SYNC_RETRY = {
+  /** In-call attempts before a single sync is considered failed. */
   MAX_ATTEMPTS: 4,
   /** Base backoff in milliseconds; doubled each attempt (2s, 4s, 8s, 16s). */
   BASE_BACKOFF_MS: 2_000,
+  /**
+   * Total lifetime ERROR cycles (in-call exhaustion + scheduled RETRY jobs)
+   * before the system gives up and leaves the invitation in ERROR for manual
+   * intervention. Prevents an unreachable device from retrying forever.
+   */
+  MAX_LIFETIME_ATTEMPTS: 5,
+  /** Base delay before the next scheduled RETRY job; grows with attempts. */
+  RETRY_JOB_BASE_DELAY_MS: 5 * 60_000, // 5 minutes
 } as const;
 
 /** How long to wait for an RTU to acknowledge an SMS command before timing out. */

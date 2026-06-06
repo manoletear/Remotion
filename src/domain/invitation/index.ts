@@ -13,6 +13,12 @@ export interface Invitation {
   /** ISO-8601 end of the validity window. */
   fecha_fin: string;
   estado: InvitationStatus;
+  /**
+   * True once the resident has revoked the invitation. Distinguishes intent
+   * after a sync fails into ERROR: a cancelled invitation must be re-driven
+   * toward removal, never re-added.
+   */
+  cancelled: boolean;
   /** RTU phonebook slot assigned while ACTIVE; null when not loaded. */
   rtu_slot: number | null;
   /** Number of failed sync attempts so far. */
