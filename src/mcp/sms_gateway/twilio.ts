@@ -7,21 +7,22 @@ export interface TwilioConfig {
   /** Sender number (the gateway SIM/long-code), E.164. */
   from: string;
   /**
-   * Resolve an inbound reply from the device. Inbound SMS arrives via a Twilio
-   * webhook out of band, so the lifecycle layer must persist replies somewhere
-   * (e.g. a Supabase `inbound_sms` table) and expose them here. Returns the
-   * reply body once available, or null on timeout.
+   * Non-blocking lookup of a device reply. Inbound SMS arrives via a Twilio
+   * webhook out of band, so the deployment persists replies (e.g. a Supabase
+   * `inbound_sms` table written by the webhook) and exposes the oldest unconsumed
+   * reply from `from` at/after `sinceIso` here, consuming it. Returns the reply
+   * body, or null if none has arrived yet.
    */
-  awaitInbound?: (from: string, sinceIso: string, timeoutMs: number) => Promise<string | null>;
+  pollInbound?: (from: string, sinceIso: string) => Promise<string | null>;
 }
 
 /**
  * Twilio-backed SMS gateway adapter.
  *
  * `send` calls the Twilio Messages REST API directly via fetch (no SDK needed).
- * `sendAndAwaitReply` sends, then defers to {@link TwilioConfig.awaitInbound} to
- * correlate the device's reply — because inbound delivery is webhook-driven and
- * cannot be awaited inline without an external store.
+ * `pollReply` defers to {@link TwilioConfig.pollInbound} to correlate the
+ * device's reply — inbound delivery is webhook-driven, so the reconciler polls
+ * the persisted replies on each tick instead of blocking.
  */
 export class TwilioSmsGateway implements SmsGatewayPort {
   constructor(private readonly config: TwilioConfig) {}
@@ -61,18 +62,10 @@ export class TwilioSmsGateway implements SmsGatewayPort {
     };
   }
 
-  async sendAndAwaitReply(
-    to: string,
-    body: string,
-    timeoutMs: number = RTU_ACK_TIMEOUT_MS,
-  ): Promise<SmsReply | null> {
-    const sentAt = new Date().toISOString();
-    const sent = await this.send(to, body);
-    if (sent.status === "failed") return null;
-    if (!this.config.awaitInbound) return null;
-
-    const reply = await this.config.awaitInbound(to, sentAt, timeoutMs);
-    if (reply === null) return null;
-    return { from: to, body: reply, receivedAt: new Date().toISOString() };
+  async pollReply(from: string, sinceIso: string): Promise<SmsReply | null> {
+    if (!this.config.pollInbound) return null;
+    const body = await this.config.pollInbound(from, sinceIso);
+    if (body === null) return null;
+    return { from, body, receivedAt: new Date().toISOString() };
   }
 }

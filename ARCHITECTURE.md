@@ -57,13 +57,33 @@ moves throw `InvalidTransitionError`.
 1. Resident creates an invitation → `CREATED`; activation + expiration jobs are
    scheduled.
 2. Scheduler `tick` reaches the activation job → `activateInvitation` →
-   `syncAddAccess` assigns an RTU phonebook slot and sends the add command →
-   `ACTIVE`.
-3. Visitor uses the gate.
-4. Scheduler `tick` reaches the expiration job → `expireInvitation` →
-   `syncRemoveAccess` sends the delete command → `REMOVED`.
+   `syncAddAccess` reserves an RTU phonebook slot and **dispatches** the add
+   command → `PENDING_SYNC`.
+3. The device's reply (an inbound SMS) is **reconciled** — confirming `ACTIVE`,
+   or `ERROR` on a failure/timeout. See "RTU reconciler" below.
+4. Visitor uses the gate.
+5. Scheduler `tick` reaches the expiration job → `expireInvitation` →
+   `syncRemoveAccess` dispatches the delete command → `REMOVING` → (reconciled) →
+   `REMOVED`.
 
 Every step appends events (`INVITATION_*`, `RTU_SYNC_*`) to the bitácora.
+
+### RTU reconciler (dispatch / confirm)
+
+The RTU answers over SMS asynchronously, so dispatch and confirmation are
+**decoupled** — a `tick` never blocks waiting for a reply:
+
+- **Dispatch** (`syncAddAccess` / `syncRemoveAccess`): reserve the slot, stamp
+  `sent_at`, `SmsGatewayPort.send` the command, leave the invitation in
+  `PENDING_SYNC` / `REMOVING`.
+- **Confirm** (`confirmOne` / `confirmInFlight`): read the device reply via the
+  non-blocking `SmsGatewayPort.pollReply`. A success reply → `ACTIVE` / `REMOVED`;
+  a failure reply or an elapsed ack window → `ERROR` (+ scheduled `RETRY`).
+
+`tick` confirms in-flight invitations each run, so replies delivered out-of-band
+(real RTU via the Twilio inbound webhook → `inbound_sms` table) are picked up on
+the next minute. The fake gateway answers in-process, so dispatch confirms in the
+same tick — the lifecycle behaves identically against fakes and real hardware.
 
 ## RTU5024 SMS protocol
 
@@ -79,10 +99,10 @@ Slots `100..200` are reserved for invitations; `1..99` for permanent residents.
 
 ## Reliability
 
-- RTU sync retries with exponential backoff (2s/4s/8s/16s), configurable via
-  `SkillContext.syncRetry`.
-- Failures land the invitation in `ERROR` with `sync_attempts` and `last_error`
-  recorded; a `RETRY` job re-drives it toward its intended end state.
+- Failures (a failure reply, a rejected send, or an unanswered command past the
+  ack window) land the invitation in `ERROR` with `sync_attempts` and `last_error`
+  recorded; a `RETRY` job (growing backoff, capped by `MAX_LIFETIME_ATTEMPTS`)
+  re-drives it toward its intended end state, reusing the reserved slot.
 - Slot assignment is deterministic and idempotent, so re-running a sync does not
   duplicate device entries. The invitation's `dispositivo_id` + `rtu_slot` are set
   together on activation and cleared on removal, and a partial unique index on

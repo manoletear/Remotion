@@ -8,7 +8,6 @@ export * from "./activate_invitation.js";
 export * from "./expire_invitation.js";
 export * from "./rtu_add_user.js";
 export * from "./rtu_remove_user.js";
-export * from "./rtu_query_user.js";
 export * from "./provisioning.js";
 export * from "./rtu/protocol.js";
 export type { RtuResult } from "./rtu/types.js";

@@ -4,7 +4,7 @@ import {
   assertTransition,
   canTransition,
 } from "../domain/invitation/index.js";
-import { RTU5024, RTU_SYNC_RETRY } from "../shared/constants.js";
+import { RTU5024, RTU_ACK_TIMEOUT_MS, RTU_SYNC_RETRY } from "../shared/constants.js";
 import {
   EntityType,
   EventType,
@@ -14,13 +14,12 @@ import {
 } from "../shared/enums.js";
 import type { InvitationPatch } from "../mcp/supabase/port.js";
 import { NotFoundError, RtuSyncError } from "../shared/errors.js";
-import { withRetry } from "../shared/utils.js";
 import { auditEvent } from "../skills/audit_event.js";
 import type { SkillContext } from "../skills/context.js";
-import { rtuAddUser } from "../skills/rtu_add_user.js";
-import { rtuQueryUser } from "../skills/rtu_query_user.js";
-import { rtuRemoveUser } from "../skills/rtu_remove_user.js";
 import { notifyVisitor } from "../skills/notify.js";
+import { parseMutationReply } from "../skills/rtu/protocol.js";
+import { rtuAddUser } from "../skills/rtu_add_user.js";
+import { rtuRemoveUser } from "../skills/rtu_remove_user.js";
 
 /** Persist a validated status transition and return the new row. */
 async function transition(
@@ -53,13 +52,20 @@ async function resolveDevice(ctx: SkillContext, inv: Invitation): Promise<Device
   return device;
 }
 
+/** Whether an in-flight command has exceeded the device ack window. */
+function timedOut(inv: Invitation, now: Date): boolean {
+  if (!inv.sent_at) return false;
+  return now.getTime() - Date.parse(inv.sent_at) > RTU_ACK_TIMEOUT_MS;
+}
+
 /**
- * Push an invitation onto the RTU (PERMISO -> ACTIVACION -> DISPOSITIVO).
+ * Dispatch an add onto the RTU (PERMISO -> ACTIVACION -> DISPOSITIVO).
  *
- * Idempotent and retry-safe: only acts on CREATED/PENDING_SYNC/ERROR
- * invitations, assigns a stable phonebook slot, retries the SMS command with
- * exponential backoff, and lands the invitation in ACTIVE or ERROR. Emits the
- * RTU_SYNC_* trail plus INVITATION_ACTIVATED on success.
+ * Reserves a stable phonebook slot, marks the invitation PENDING_SYNC with a
+ * `sent_at`, and **sends the command without waiting** for the device's reply.
+ * Confirmation is reconciled separately ({@link confirmOne}); the opportunistic
+ * confirm at the end finishes instantly against a fake device and defers to a
+ * later tick against a real (async) one. Idempotent on non-actionable states.
  */
 export async function syncAddAccess(
   ctx: SkillContext,
@@ -76,12 +82,19 @@ export async function syncAddAccess(
   if (!actionable.includes(inv.estado)) return inv; // nothing to do
 
   const device = await resolveDevice(ctx, inv);
-  if (inv.estado !== InvitationStatus.PENDING_SYNC) {
-    inv = await transition(ctx, inv, InvitationStatus.PENDING_SYNC);
-  }
-
   const slot = inv.rtu_slot ?? (await assignSlot(ctx, device));
-  const visitorPhone = inv.visitante_telefono;
+  // Reserve the slot + device and mark in-flight before sending. The DB unique
+  // index on (dispositivo_id, rtu_slot) makes the reservation race-safe.
+  const reserve: InvitationPatch = {
+    dispositivo_id: device.id,
+    rtu_slot: slot,
+    sent_at: ctx.now().toISOString(),
+    last_error: null,
+  };
+  inv =
+    inv.estado === InvitationStatus.PENDING_SYNC
+      ? await ctx.store.invitations.update(inv.id, reserve)
+      : await transition(ctx, inv, InvitationStatus.PENDING_SYNC, reserve);
 
   await auditEvent(ctx, {
     tipo: EventType.RTU_SYNC_STARTED,
@@ -91,64 +104,24 @@ export async function syncAddAccess(
   });
 
   try {
-    const result = await withRetry(
-      async () => {
-        const r = await rtuAddUser(ctx, {
-          device,
-          phone: visitorPhone,
-          slot,
-        });
-        if (r.status !== RtuResultStatus.SUCCESS) {
-          throw new RtuSyncError(`RTU add failed: ${r.status}`, { reply: r.rawReply });
-        }
-        return r;
-      },
-      ctx.syncRetry,
-    );
-
-    // Optionally confirm the operation actually took effect on the device by
-    // reading back its authorized list (the doc's "Confirmar operaciones").
-    if (ctx.verifyAfterSync) {
-      const check = await rtuQueryUser(ctx, { device, phone: inv.visitante_telefono });
-      if (check.status !== RtuResultStatus.SUCCESS) {
-        throw new RtuSyncError(`RTU add not confirmed: ${check.status}`, {
-          reply: check.rawReply,
-        });
-      }
+    const dispatch = await rtuAddUser(ctx, {
+      device,
+      phone: inv.visitante_telefono,
+      slot,
+    });
+    if (dispatch.sendStatus === "failed") {
+      throw new RtuSyncError("RTU add failed: send rejected by gateway");
     }
-
-    inv = await transition(ctx, inv, InvitationStatus.ACTIVE, {
-      dispositivo_id: device.id,
-      rtu_slot: slot,
-      last_error: null,
-    });
-    await auditEvent(ctx, {
-      tipo: EventType.RTU_SYNC_SUCCESS,
-      entidad: EntityType.INVITATION,
-      entidad_id: inv.id,
-      payload: { operation: RtuOperation.ADD_USER, command: result.command },
-    });
-    await auditEvent(ctx, {
-      tipo: EventType.INVITATION_ACTIVATED,
-      entidad: EntityType.INVITATION,
-      entidad_id: inv.id,
-      payload: { slot },
-    });
-    await notifyVisitor(
-      ctx,
-      inv,
-      "Acceso activado",
-      "Tu acceso al portón ya está activo.",
-    );
-    return inv;
   } catch (error) {
     return failSync(ctx, inv, RtuOperation.ADD_USER, error);
   }
+
+  return confirmOne(ctx, inv, ctx.now());
 }
 
 /**
- * Remove an invitation from the RTU. Reason-agnostic: callers (expire/cancel)
- * own the domain milestone event; this handles the device interaction and the
+ * Dispatch a removal from the RTU. Reason-agnostic: callers (expire/cancel) own
+ * the domain milestone event; this sends the clear command and reconciles the
  * REMOVING -> REMOVED transition. If the invitation was never loaded (no slot)
  * it is closed out without touching the device.
  */
@@ -167,7 +140,11 @@ export async function syncRemoveAccess(
 
   const device = await resolveDevice(ctx, inv);
   const slot = inv.rtu_slot;
-  inv = await transition(ctx, inv, InvitationStatus.REMOVING);
+  const reserve: InvitationPatch = { sent_at: ctx.now().toISOString() };
+  inv =
+    inv.estado === InvitationStatus.REMOVING
+      ? await ctx.store.invitations.update(inv.id, reserve)
+      : await transition(ctx, inv, InvitationStatus.REMOVING, reserve);
 
   await auditEvent(ctx, {
     tipo: EventType.RTU_SYNC_STARTED,
@@ -177,31 +154,142 @@ export async function syncRemoveAccess(
   });
 
   try {
-    const result = await withRetry(
-      async () => {
-        const r = await rtuRemoveUser(ctx, { device, slot });
-        if (r.status !== RtuResultStatus.SUCCESS) {
-          throw new RtuSyncError(`RTU remove failed: ${r.status}`, { reply: r.rawReply });
-        }
-        return r;
-      },
-      ctx.syncRetry,
-    );
-
-    inv = await transition(ctx, inv, InvitationStatus.REMOVED, {
-      dispositivo_id: null,
-      rtu_slot: null,
-      last_error: null,
-    });
-    await auditEvent(ctx, {
-      tipo: EventType.RTU_SYNC_SUCCESS,
-      entidad: EntityType.INVITATION,
-      entidad_id: inv.id,
-      payload: { operation: RtuOperation.REMOVE_USER, command: result.command },
-    });
-    return inv;
+    const dispatch = await rtuRemoveUser(ctx, { device, slot });
+    if (dispatch.sendStatus === "failed") {
+      throw new RtuSyncError("RTU remove failed: send rejected by gateway");
+    }
   } catch (error) {
     return failSync(ctx, inv, RtuOperation.REMOVE_USER, error);
+  }
+
+  return confirmOne(ctx, inv, ctx.now());
+}
+
+/**
+ * Reconcile a single in-flight invitation against the device's reply.
+ *
+ * Non-blocking: reads the reply that has arrived (if any) via the gateway's
+ * `pollReply`. A present reply confirms ACTIVE/REMOVED (or fails); no reply
+ * within the ack window times out into ERROR; otherwise the invitation is left
+ * in-flight for a later tick. Only PENDING_SYNC / REMOVING are acted on.
+ */
+export async function confirmOne(
+  ctx: SkillContext,
+  inv: Invitation,
+  now: Date = ctx.now(),
+): Promise<Invitation> {
+  if (
+    inv.estado !== InvitationStatus.PENDING_SYNC &&
+    inv.estado !== InvitationStatus.REMOVING
+  ) {
+    return inv;
+  }
+
+  const device = await resolveDevice(ctx, inv);
+  const since = inv.sent_at ?? inv.updated_at;
+  const reply = await ctx.sms.pollReply(device.numero_sim, since);
+
+  if (inv.estado === InvitationStatus.PENDING_SYNC) {
+    if (reply) {
+      if (parseMutationReply(reply.body) === RtuResultStatus.SUCCESS) {
+        const active = await transition(ctx, inv, InvitationStatus.ACTIVE, {
+          sent_at: null,
+          last_error: null,
+        });
+        await auditEvent(ctx, {
+          tipo: EventType.RTU_SYNC_SUCCESS,
+          entidad: EntityType.INVITATION,
+          entidad_id: active.id,
+          payload: { operation: RtuOperation.ADD_USER },
+        });
+        await auditEvent(ctx, {
+          tipo: EventType.INVITATION_ACTIVATED,
+          entidad: EntityType.INVITATION,
+          entidad_id: active.id,
+          payload: { slot: active.rtu_slot },
+        });
+        await notifyVisitor(
+          ctx,
+          active,
+          "Acceso activado",
+          "Tu acceso al portón ya está activo.",
+        );
+        return active;
+      }
+      return failSync(
+        ctx,
+        inv,
+        RtuOperation.ADD_USER,
+        new RtuSyncError(`RTU add failed: ${reply.body}`),
+      );
+    }
+    if (timedOut(inv, now)) {
+      return failSync(
+        ctx,
+        inv,
+        RtuOperation.ADD_USER,
+        new RtuSyncError("RTU add not confirmed: device ack timeout"),
+      );
+    }
+    return inv; // still in-flight
+  }
+
+  // REMOVING
+  if (reply) {
+    if (parseMutationReply(reply.body) === RtuResultStatus.SUCCESS) {
+      const removed = await transition(ctx, inv, InvitationStatus.REMOVED, {
+        dispositivo_id: null,
+        rtu_slot: null,
+        sent_at: null,
+        last_error: null,
+      });
+      await auditEvent(ctx, {
+        tipo: EventType.RTU_SYNC_SUCCESS,
+        entidad: EntityType.INVITATION,
+        entidad_id: removed.id,
+        payload: { operation: RtuOperation.REMOVE_USER },
+      });
+      return removed;
+    }
+    return failSync(
+      ctx,
+      inv,
+      RtuOperation.REMOVE_USER,
+      new RtuSyncError(`RTU remove failed: ${reply.body}`),
+    );
+  }
+  if (timedOut(inv, now)) {
+    return failSync(
+      ctx,
+      inv,
+      RtuOperation.REMOVE_USER,
+      new RtuSyncError("RTU remove not confirmed: device ack timeout"),
+    );
+  }
+  return inv; // still in-flight
+}
+
+/**
+ * Reconcile every in-flight invitation (PENDING_SYNC / REMOVING). Called by the
+ * lifecycle tick so replies that arrived out-of-band (real RTU via the inbound
+ * webhook) are confirmed without any blocking wait. One failure must not block
+ * the rest of the sweep.
+ */
+export async function confirmInFlight(
+  ctx: SkillContext,
+  now: Date = ctx.now(),
+): Promise<void> {
+  const inFlight = [
+    ...(await ctx.store.invitations.listByStatus(InvitationStatus.PENDING_SYNC)),
+    ...(await ctx.store.invitations.listByStatus(InvitationStatus.REMOVING)),
+  ];
+  for (const inv of inFlight) {
+    try {
+      await confirmOne(ctx, inv, now);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(`Confirm failed for invitation ${inv.id}:`, error);
+    }
   }
 }
 
@@ -218,6 +306,7 @@ async function closeOut(ctx: SkillContext, inv: Invitation): Promise<Invitation>
  * Record a failed sync: ERROR status, attempt counter, audit event, and — while
  * under the lifetime cap — schedule a RETRY job so the lifecycle re-drives it
  * automatically. Past the cap the invitation is left in ERROR for manual review.
+ * The reserved slot is kept so the retry reuses the same phonebook position.
  */
 async function failSync(
   ctx: SkillContext,
@@ -231,6 +320,7 @@ async function failSync(
   const updated = await transition(ctx, inv, InvitationStatus.ERROR, {
     sync_attempts: inv.sync_attempts + 1,
     last_error: message,
+    sent_at: null,
   });
 
   const exhausted = updated.sync_attempts >= RTU_SYNC_RETRY.MAX_LIFETIME_ATTEMPTS;

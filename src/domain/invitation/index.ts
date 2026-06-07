@@ -23,6 +23,12 @@ export interface Invitation {
   dispositivo_id: string | null;
   /** RTU phonebook slot assigned while ACTIVE; null when not loaded. */
   rtu_slot: number | null;
+  /**
+   * When the in-flight RTU command was dispatched (ISO-8601), while in
+   * PENDING_SYNC or REMOVING. The reconciler reads the device's reply since this
+   * instant to confirm the command, and times it out against it. Null otherwise.
+   */
+  sent_at: string | null;
   /** Number of failed sync attempts so far. */
   sync_attempts: number;
   /** Last sync error message, when estado === ERROR. */

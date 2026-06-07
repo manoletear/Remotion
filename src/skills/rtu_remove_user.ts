@@ -1,7 +1,6 @@
 import type { Device } from "../domain/device/index.js";
-import { RTU_ACK_TIMEOUT_MS } from "../shared/constants.js";
-import { buildRemoveUserCommand, parseMutationReply } from "./rtu/protocol.js";
-import type { RtuResult } from "./rtu/types.js";
+import { buildRemoveUserCommand } from "./rtu/protocol.js";
+import type { RtuDispatch } from "./rtu_add_user.js";
 import type { SkillContext } from "./context.js";
 
 export interface RtuRemoveUserInput {
@@ -11,17 +10,14 @@ export interface RtuRemoveUserInput {
 }
 
 /**
- * RTU Remove User skill. Clears an authorized number from a phonebook slot.
+ * RTU Remove User skill — **dispatch only**. Sends the command to clear an
+ * authorized number from a phonebook slot; the confirmation is reconciled later.
  */
 export async function rtuRemoveUser(
   ctx: SkillContext,
   input: RtuRemoveUserInput,
-): Promise<RtuResult> {
+): Promise<RtuDispatch> {
   const command = buildRemoveUserCommand(input.device.password, input.slot);
-  const reply = await ctx.sms.sendAndAwaitReply(
-    input.device.numero_sim,
-    command,
-    RTU_ACK_TIMEOUT_MS,
-  );
-  return { status: parseMutationReply(reply?.body ?? null), command, rawReply: reply?.body ?? null };
+  const res = await ctx.sms.send(input.device.numero_sim, command);
+  return { command, sendStatus: res.status };
 }

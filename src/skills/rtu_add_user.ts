@@ -1,9 +1,8 @@
 import type { Device } from "../domain/device/index.js";
-import { RTU_ACK_TIMEOUT_MS } from "../shared/constants.js";
+import type { SmsSendResult } from "../mcp/sms_gateway/port.js";
 import { ValidationError } from "../shared/errors.js";
 import { isValidE164 } from "../shared/utils.js";
-import { buildAddUserCommand, parseMutationReply } from "./rtu/protocol.js";
-import type { RtuResult } from "./rtu/types.js";
+import { buildAddUserCommand } from "./rtu/protocol.js";
 import type { SkillContext } from "./context.js";
 
 export interface RtuAddUserInput {
@@ -14,25 +13,30 @@ export interface RtuAddUserInput {
   slot: number;
 }
 
+/** Outcome of dispatching an RTU command (confirmation is reconciled later). */
+export interface RtuDispatch {
+  /** The exact SMS command sent to the device. */
+  command: string;
+  /** Provider-reported status at send time. */
+  sendStatus: SmsSendResult["status"];
+}
+
 /**
- * RTU Add User skill. Composes the RTU5024 add command and dispatches it via the
- * SMS Gateway, then interprets the reply. Pure device interaction — no domain
- * persistence; the orchestration layer records the resulting state.
+ * RTU Add User skill — **dispatch only**. Composes the RTU5024 add command and
+ * sends it via the SMS Gateway (fire-and-forget). The device's confirmation
+ * arrives as a separate inbound SMS and is reconciled by the lifecycle, so this
+ * does not wait for a reply.
  */
 export async function rtuAddUser(
   ctx: SkillContext,
   input: RtuAddUserInput,
-): Promise<RtuResult> {
+): Promise<RtuDispatch> {
   if (!isValidE164(input.phone)) {
     throw new ValidationError("Invalid phone for RTU add", [
       `not E.164: ${input.phone}`,
     ]);
   }
   const command = buildAddUserCommand(input.device.password, input.slot, input.phone);
-  const reply = await ctx.sms.sendAndAwaitReply(
-    input.device.numero_sim,
-    command,
-    RTU_ACK_TIMEOUT_MS,
-  );
-  return { status: parseMutationReply(reply?.body ?? null), command, rawReply: reply?.body ?? null };
+  const res = await ctx.sms.send(input.device.numero_sim, command);
+  return { command, sendStatus: res.status };
 }

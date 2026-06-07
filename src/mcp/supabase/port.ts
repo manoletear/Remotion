@@ -64,6 +64,7 @@ export type InvitationPatch = Partial<
     | "cancelled"
     | "dispositivo_id"
     | "rtu_slot"
+    | "sent_at"
     | "sync_attempts"
     | "last_error"
     | "visitante_nombre"

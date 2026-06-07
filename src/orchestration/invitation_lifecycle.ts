@@ -2,7 +2,7 @@ import { InvitationStatus } from "../shared/enums.js";
 import { activateInvitation } from "../skills/activate_invitation.js";
 import type { SkillContext } from "../skills/context.js";
 import { expireInvitation } from "../skills/expire_invitation.js";
-import { syncAddAccess, syncRemoveAccess } from "./rtu_sync.js";
+import { confirmInFlight, syncAddAccess, syncRemoveAccess } from "./rtu_sync.js";
 
 export interface TickReport {
   processed: number;
@@ -60,6 +60,12 @@ export async function tick(ctx: SkillContext, now: Date = ctx.now()): Promise<Ti
     }
   }
 
+  // Reconcile any in-flight commands whose device reply has arrived out-of-band
+  // (real RTU via the inbound webhook). Non-blocking: replies not yet in are
+  // simply picked up next tick. For the fake gateway this is a no-op because the
+  // opportunistic confirm at dispatch already finalized them.
+  await confirmInFlight(ctx, now);
+
   return report;
 }
 
@@ -81,4 +87,4 @@ async function retry(ctx: SkillContext, invitationId: string): Promise<void> {
   }
 }
 
-export { syncAddAccess, syncRemoveAccess } from "./rtu_sync.js";
+export { confirmInFlight, syncAddAccess, syncRemoveAccess } from "./rtu_sync.js";

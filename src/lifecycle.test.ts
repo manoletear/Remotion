@@ -7,6 +7,7 @@ import { FakeSmsGateway } from "./mcp/sms_gateway/fake.js";
 import { InMemoryScheduler } from "./mcp/scheduler/in_memory.js";
 import { InMemoryDataStore } from "./mcp/supabase/in_memory.js";
 import { tick } from "./orchestration/invitation_lifecycle.js";
+import { RTU_ACK_TIMEOUT_MS } from "./shared/constants.js";
 import { InvitationStatus } from "./shared/enums.js";
 import { normalizePhone } from "./shared/utils.js";
 import { cancelInvitation } from "./skills/cancel_invitation.js";
@@ -30,8 +31,7 @@ function fakeRtu(_to: string, body: string): string {
 }
 
 async function setup(
-  replyFn = fakeRtu,
-  opts: { verifyAfterSync?: boolean } = {},
+  replyFn: (to: string, body: string) => string | null = fakeRtu,
 ): Promise<{
   ctx: SkillContext;
   sms: FakeSmsGateway;
@@ -45,8 +45,6 @@ async function setup(
     sms,
     scheduler: new InMemoryScheduler(),
     notifier: new ConsoleNotifier(),
-    syncRetry: { maxAttempts: 4, baseMs: 1 }, // fast backoff for tests
-    verifyAfterSync: opts.verifyAfterSync ?? false,
   });
   const condo = await registerCondominium(ctx, { nombre: "Test" });
   const property = await registerProperty(ctx, { condominio_id: condo.id, numero: "1" });
@@ -170,12 +168,10 @@ test("failed add schedules a RETRY that later recovers to ACTIVE", async () => {
   assert.equal(recovered.rtu_slot, 100);
 });
 
-test("verifyAfterSync drives to ERROR when the device does not confirm", async () => {
-  const reply = (_to: string, body: string): string => {
-    if (body.includes("AL#")) return "list: 100:+56999999999"; // a different number
-    return "Add success";
-  };
-  const { ctx, store, propertyId } = await setup(reply, { verifyAfterSync: true });
+test("a device that never replies times out into ERROR after the ack window", async () => {
+  // Device accepts nothing back (no reply) -> the add stays in-flight until the
+  // ack window elapses, then the confirm sweep times it out.
+  const { ctx, store, propertyId } = await setup(() => null);
   const w = window();
   const inv = await createInvitation(ctx, {
     propiedad_id: propertyId,
@@ -184,7 +180,12 @@ test("verifyAfterSync drives to ERROR when the device does not confirm", async (
     fecha_inicio: w.fecha_inicio,
     fecha_fin: w.fecha_fin,
   });
-  await tick(ctx, w.start);
+
+  await tick(ctx, w.start); // dispatched, no reply -> still PENDING_SYNC
+  assert.equal((await store.invitations.get(inv.id))!.estado, InvitationStatus.PENDING_SYNC);
+
+  // A later tick, past the ack window, times the in-flight add out.
+  await tick(ctx, new Date(w.start.getTime() + RTU_ACK_TIMEOUT_MS + 1000));
   const after = (await store.invitations.get(inv.id))!;
   assert.equal(after.estado, InvitationStatus.ERROR);
   assert.match(after.last_error ?? "", /not confirmed/);

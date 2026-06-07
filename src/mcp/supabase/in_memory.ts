@@ -131,6 +131,7 @@ export class InMemoryDataStore implements DataStore {
         cancelled: false,
         dispositivo_id: null,
         rtu_slot: null,
+        sent_at: null,
         sync_attempts: 0,
         last_error: null,
         created_at: ts,
