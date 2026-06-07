@@ -117,6 +117,7 @@ export async function syncAddAccess(
     }
 
     inv = await transition(ctx, inv, InvitationStatus.ACTIVE, {
+      dispositivo_id: device.id,
       rtu_slot: slot,
       last_error: null,
     });
@@ -181,6 +182,7 @@ export async function syncRemoveAccess(
     );
 
     inv = await transition(ctx, inv, InvitationStatus.REMOVED, {
+      dispositivo_id: null,
       rtu_slot: null,
       last_error: null,
     });

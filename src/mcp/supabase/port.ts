@@ -34,10 +34,14 @@ export interface PropertyRepository {
   listByCondominium(condominioId: string): Promise<Property[]>;
 }
 
+/** Editable fields of a resident after creation. */
+export type ResidentPatch = Partial<Pick<Resident, "nombre" | "telefono">>;
+
 export interface ResidentRepository {
   create(input: NewResident): Promise<Resident>;
   get(id: string): Promise<Resident | null>;
   listByProperty(propiedadId: string): Promise<Resident[]>;
+  update(id: string, patch: ResidentPatch): Promise<Resident>;
 }
 
 export interface DeviceRepository {
@@ -58,6 +62,7 @@ export type InvitationPatch = Partial<
     Invitation,
     | "estado"
     | "cancelled"
+    | "dispositivo_id"
     | "rtu_slot"
     | "sync_attempts"
     | "last_error"

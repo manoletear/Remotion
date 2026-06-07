@@ -19,7 +19,7 @@ import {
 } from "../../shared/enums.js";
 import { RTU5024 } from "../../shared/constants.js";
 import { newId, nowIso } from "../../shared/utils.js";
-import type { DataStore, InvitationPatch } from "./port.js";
+import type { DataStore, InvitationPatch, ResidentPatch } from "./port.js";
 
 /**
  * In-memory implementation of the persistence port. Used by tests and the
@@ -90,6 +90,13 @@ export class InMemoryDataStore implements DataStore {
     get: async (id: string) => this._residents.get(id) ?? null,
     listByProperty: async (propiedadId: string) =>
       [...this._residents.values()].filter((r) => r.propiedad_id === propiedadId),
+    update: async (id: string, patch: ResidentPatch): Promise<Resident> => {
+      const current = this._residents.get(id);
+      if (!current) throw new Error(`Resident not found: ${id}`);
+      const next: Resident = { ...current, ...patch };
+      this._residents.set(id, next);
+      return next;
+    },
   };
 
   devices = {
@@ -122,6 +129,7 @@ export class InMemoryDataStore implements DataStore {
         fecha_fin: input.fecha_fin,
         estado: InvitationStatus.CREATED,
         cancelled: false,
+        dispositivo_id: null,
         rtu_slot: null,
         sync_attempts: 0,
         last_error: null,
@@ -144,13 +152,11 @@ export class InMemoryDataStore implements DataStore {
     listByStatus: async (status: InvitationStatus) =>
       [...this._invitations.values()].filter((i) => i.estado === status),
     occupiedSlots: async (deviceId: string) => {
-      const device = this._devices.get(deviceId);
-      if (!device) return [];
       const slots: number[] = [];
       for (const inv of this._invitations.values()) {
-        if (inv.rtu_slot === null) continue;
-        const dev = this.deviceForProperty(inv.propiedad_id);
-        if (dev?.id === deviceId) slots.push(inv.rtu_slot);
+        if (inv.rtu_slot !== null && inv.dispositivo_id === deviceId) {
+          slots.push(inv.rtu_slot);
+        }
       }
       return slots;
     },

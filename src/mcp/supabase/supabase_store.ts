@@ -20,7 +20,7 @@ import {
   type InvitationStatus,
 } from "../../shared/enums.js";
 import { RTU5024 } from "../../shared/constants.js";
-import type { DataStore, InvitationPatch } from "./port.js";
+import type { DataStore, InvitationPatch, ResidentPatch } from "./port.js";
 
 /** Physical table names. Kept in one place and mirrored by the SQL migration. */
 const TABLES = {
@@ -94,6 +94,8 @@ export class SupabaseDataStore implements DataStore {
       maybeOne(await this.db.from(TABLES.residents).select().eq("id", id).maybeSingle()),
     listByProperty: async (propiedadId: string): Promise<Resident[]> =>
       many(await this.db.from(TABLES.residents).select().eq("propiedad_id", propiedadId)),
+    update: async (id: string, patch: ResidentPatch): Promise<Resident> =>
+      single(await this.db.from(TABLES.residents).update(patch).eq("id", id).select().single()),
   };
 
   devices = {
@@ -148,19 +150,11 @@ export class SupabaseDataStore implements DataStore {
     listByStatus: async (status: InvitationStatus): Promise<Invitation[]> =>
       many(await this.db.from(TABLES.invitations).select().eq("estado", status)),
     occupiedSlots: async (deviceId: string): Promise<number[]> => {
-      const device = maybeOne<{ condominio_id: string }>(
-        await this.db.from(TABLES.devices).select("condominio_id").eq("id", deviceId).maybeSingle(),
-      );
-      if (!device) return [];
-      const props = many<{ id: string }>(
-        await this.db.from(TABLES.properties).select("id").eq("condominio_id", device.condominio_id),
-      );
-      if (props.length === 0) return [];
       const rows = many<{ rtu_slot: number | null }>(
         await this.db
           .from(TABLES.invitations)
           .select("rtu_slot")
-          .in("propiedad_id", props.map((p) => p.id))
+          .eq("dispositivo_id", deviceId)
           .not("rtu_slot", "is", null),
       );
       return rows.flatMap((r) => (r.rtu_slot === null ? [] : [r.rtu_slot]));
