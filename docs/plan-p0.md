@@ -9,6 +9,29 @@
 > directamente — **siempre pasa por las skills** del access layer a través de
 > *server actions*. Eso mantiene toda la lógica probada y deja P1 enchufable.
 
+## Revisión post-M0 (estado actual)
+> Actualización tras construir y verificar **M0** (rama `claude/p0-web-app`).
+
+**Lo que se validó:**
+- El seam de integración es real: la app corre completa contra fakes y para ir
+  "Supabase real" solo se cambia `web/lib/context.ts`. Confirmado en código.
+- **M3/M4 ya están demostrados contra fakes** (listar/crear/cancelar/bitácora).
+- Se añadió el **seam de sesión `getCurrentResident()`** (único punto que cambia
+  para el login de M2) + el punto de autorización por propiedad.
+
+**Decisiones que se resolvieron (ver §3):**
+- **Estructura del repo** → ni monorepo ni `externalDir`: la librería se compila a
+  `dist/` y la web la importa como ESM ya compilado vía `file:..`. Más simple, sin
+  mover `src/`.
+
+**Hueco detectado (corrección importante, ver §1.D/E):**
+- El loop RTU `sendAndAwaitReply` es **bloqueante (hasta 60s)** dentro de `tick()`.
+  En serverless (Vercel Cron) eso **no escala** (N activaciones × 60s por invocación).
+  → Hay que **desacoplar despacho de confirmación** (reconciliador). Es un ítem de
+  diseño de P0, no un detalle.
+
+---
+
 ## 0. Punto de partida (lo que YA existe y reusamos)
 - Dominio + máquina de estados de invitación (`src/domain`, `src/skills`).
 - Orquestación `tick()` (`invitation_lifecycle.ts`) y `rtu_sync.ts`.
@@ -25,12 +48,14 @@
 
 ## 1. Workstreams
 
-### A. Empaquetado: hacer que la web app consuma el access layer
-- **Estructura:** workspace npm con `apps/web` (Next.js) + el access layer como
-  paquete interno `@gate/access-layer` (mover `src/` a `packages/access-layer/src`,
-  o mantener `src/` en raíz e importar con `transpilePackages` + `externalDir`).
-  *Recomendado MVP:* `apps/web` + `packages/access-layer` (refactor mecánico, sin
-  tocar lógica) para imports limpios y un solo `tsconfig` base.
+### A. Empaquetado: hacer que la web app consuma el access layer ✅ (M0 hecho)
+- **Estructura (RESUELTO):** la librería se compila a `dist/` (`tsconfig.build.json`
+  + `exports` en `package.json`) y la web app (`web/`) la importa como **ESM ya
+  compilado** vía dependencia `file:..`. Evita mover `src/` y evita que Next
+  tropiece con los imports `.js` de NodeNext. `serverExternalPackages` la mantiene
+  server-only. *(Se descartó el monorepo `apps/web` + `packages/access-layer`.)*
+- **Build-order:** la librería debe compilarse **antes** del `next build` (la web
+  importa `dist/`). Ver §F para el wrinkle de despliegue.
 - **Factory de contexto server-side:** `makeServerContext(session)` que arma el
   `SkillContext` con:
   - `SupabaseDataStore` (cliente con sesión del usuario → respeta RLS).
@@ -73,6 +98,20 @@
 - Endpoint autenticado con `CRON_SECRET`; corre con contexto de servicio (service role)
   porque opera sobre todas las invitaciones, no las de un usuario.
 
+> ⚠️ **Ítem de diseño (descubierto en M0): reconciliador, no espera bloqueante.**
+> Hoy `rtu_sync` hace `sendAndAwaitReply` bloqueante (hasta `RTU_ACK_TIMEOUT_MS`
+> = 60s) *dentro* de `tick()`. En serverless, un `tick` con N activaciones haría
+> N × 60s secuencial → revienta el límite de tiempo de función. **Solución:**
+> desacoplar en dos fases dirigidas por ticks + webhook inbound:
+> 1. *Despacho* (tick A): envía el comando, deja la invitación en `PENDING_SYNC`
+>    con `sent_at`. No espera respuesta.
+> 2. *Confirmación* (tick B): correlaciona la respuesta del RTU (de `inbound_sms`,
+>    §E) y transiciona a `ACTIVE`/`ERROR`.
+>
+> Probablemente requiere una migración chica (`invitaciones.sent_at` / flag
+> "esperando confirmación") y un ajuste en `rtu_sync`. Mantiene `tick()` rápido y
+> acotado. **Decisión de fondo, ver §3.**
+
 ### E. Twilio real (comunicación con el RTU)
 - **Outbound:** `TwilioSmsGateway.send` ya implementado (REST por `fetch`).
 - **Inbound (webhook):** `POST /api/sms/inbound` recibe la respuesta del RTU →
@@ -84,7 +123,11 @@
 ### F. Despliegue y configuración
 - Proyecto Vercel; env: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
   `TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM`, `CRON_SECRET`.
-- CI: `typecheck` + `test` en cada PR.
+- **Build-order en Vercel (wrinkle de M0):** como `web/` depende de la librería por
+  `file:..`, el build debe compilar la librería **primero**. Resolver con un
+  `vercel-build` (`npm --prefix .. run build && next build`) o un `prebuild` que
+  corra `npm run build` en la raíz. Sin esto, `dist/` no existe en el deploy.
+- CI: `typecheck` + `test` (librería) + `next build` (web) en cada PR.
 
 ---
 
@@ -92,27 +135,33 @@
 Cada milestone es entregable y se puede demostrar antes de pasar al siguiente.
 Los M1–M4 pueden correr contra `ConsoleNotifier`/`FakeSmsGateway` antes de cablear Twilio.
 
-| # | Milestone | Resultado demostrable |
-|---|---|---|
-| **M0** | Empaquetado + `makeServerContext` + app skeleton | `next build` verde, importa el access layer |
-| **M1** | Migración `0003` auth+RLS + vínculo auth↔residente | Un residente solo "ve" sus filas (probado por SQL) |
-| **M2** | Login + resolución sesión→residente | Entrar y obtener el residente actual |
-| **M3** | Vistas de lectura (dashboard, detalle, bitácora) | Residente ve sus invitaciones y eventos (RLS) |
-| **M4** | Flujos de escritura (crear/cancelar/perfil) | Crear y cancelar invitación desde la UI |
-| **M5** | `/api/tick` + Vercel Cron | Invitación se activa/expira sola |
-| **M6** | Twilio outbound + `/api/sms/inbound` + `0004` | Acceso real cargado/quitado en un RTU físico |
-| **M7** | Deploy a Vercel + smoke e2e | App pública funcionando contra Supabase real |
+| # | Milestone | Resultado demostrable | Estado |
+|---|---|---|---|
+| **M0** | Empaquetado + `makeServerContext` + app skeleton | `next build` verde, importa el access layer | ✅ hecho |
+| **M1** | Migración `0003` auth+RLS + vínculo auth↔residente | Un residente solo "ve" sus filas (probado por SQL) | ⏳ requiere Supabase |
+| **M2** | Login + resolución sesión→residente | Entrar y obtener el residente actual | 🟡 seam `getCurrentResident` listo; falta login real |
+| **M3** | Vistas de lectura (dashboard, detalle, bitácora) | Residente ve sus invitaciones y eventos | 🟡 demostrado en fakes; falta RLS |
+| **M4** | Flujos de escritura (crear/cancelar/perfil) | Crear y cancelar invitación desde la UI | 🟡 crear/cancelar en fakes; falta `/perfil` + RLS |
+| **M5** | `/api/tick` + Vercel Cron + **reconciliador** (§D) | Invitación se activa/expira sola, sin esperas bloqueantes | ⏳ requiere Supabase |
+| **M6** | Twilio outbound + `/api/sms/inbound` + `0004` | Acceso real cargado/quitado en un RTU físico | ⏳ requiere Supabase + hardware |
+| **M7** | Deploy a Vercel (build-order §F) + smoke e2e | App pública funcionando contra Supabase real | ⏳ |
 
 ---
 
-## 3. Decisiones pendientes (tuyas)
+## 3. Decisiones
+**Resueltas:**
+- ~~Estructura repo~~ → librería a `dist/` + web por `file:..` (no monorepo). *(M0)*
+
+**Pendientes (tuyas):**
 1. **Vínculo auth↔residente:** ¿el admin pre-crea el residente y el usuario se
    registra (enlace por email/teléfono), o auto-registro con asignación posterior?
    *Recomendado:* admin/seed crea residente + `perfiles`, enlace por email.
-2. **Estructura repo:** ¿workspace `apps/web` + `packages/access-layer` (recomendado)
-   o `web/` con `externalDir`? Afecta solo ergonomía de imports.
-3. **Auth method:** magic link (sin password, más simple) vs email+password.
+2. **Auth method:** magic link (sin password, más simple) vs email+password.
    *Recomendado:* magic link para MVP.
+3. **Reconciliador del loop RTU (nueva, §1.D):** confirmar el desacople despacho/
+   confirmación dirigido por ticks + inbound (en vez de la espera bloqueante).
+   *Recomendado:* sí — es lo que permite correr en serverless. Implica `0004` +
+   `invitaciones.sent_at` y un ajuste en `rtu_sync`.
 
 ---
 
