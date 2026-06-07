@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { getContext } from "@/lib/context";
 import { fmtDateTime, localInputValue, statusBadge } from "@/lib/format";
+import { getCurrentResident } from "@/lib/session";
 import {
   cancelarInvitacionAction,
   crearInvitacionAction,
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 const FINALIZED = new Set(["EXPIRED", "REMOVED"]);
 
 export default async function Dashboard() {
-  const { ctx, propertyId } = await getContext();
+  const { ctx, resident, propertyId } = await getCurrentResident();
   const invitations = (await ctx.store.invitations.listByProperty(propertyId)).sort(
     (a, b) => b.created_at.localeCompare(a.created_at),
   );
@@ -24,7 +24,7 @@ export default async function Dashboard() {
       <div className="toolbar">
         <div>
           <h1>Mis invitaciones</h1>
-          <p className="muted">Casa 1 · Condominio Demo</p>
+          <p className="muted">{resident.nombre} · Casa 1 · Condominio Demo</p>
         </div>
         <form action={procesarCicloAction}>
           <button className="ghost" type="submit">Procesar ciclo ▸</button>

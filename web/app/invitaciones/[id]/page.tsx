@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getContext } from "@/lib/context";
 import { fmtDateTime, statusBadge } from "@/lib/format";
+import { getCurrentResident } from "@/lib/session";
 import { cancelarInvitacionAction } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +15,11 @@ export default async function InvitationDetail({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { ctx } = await getContext();
+  const { ctx, propertyId } = await getCurrentResident();
 
   const inv = await ctx.store.invitations.get(id);
-  if (!inv) notFound();
+  // Not found OR belongs to another property -> 404 (don't leak existence).
+  if (!inv || inv.propiedad_id !== propertyId) notFound();
 
   const eventos = await ctx.store.events.listForEntity(id);
   const b = statusBadge(inv.estado);

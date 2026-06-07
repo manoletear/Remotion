@@ -19,6 +19,10 @@ import {
  * is this factory (swap InMemoryDataStore -> SupabaseDataStore, FakeSmsGateway ->
  * TwilioSmsGateway, InMemoryScheduler -> SupabaseScheduler). Everything above —
  * pages, server actions, skills — stays identical.
+ *
+ * DEV-ONLY: the in-memory store lives in a single process and does NOT persist
+ * across serverless invocations. This factory is for local development/demo; the
+ * deploy target is always the Supabase-backed context.
  */
 export interface Bootstrap {
   ctx: SkillContext;
