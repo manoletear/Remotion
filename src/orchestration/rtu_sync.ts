@@ -20,6 +20,7 @@ import type { SkillContext } from "../skills/context.js";
 import { rtuAddUser } from "../skills/rtu_add_user.js";
 import { rtuQueryUser } from "../skills/rtu_query_user.js";
 import { rtuRemoveUser } from "../skills/rtu_remove_user.js";
+import { notifyVisitor } from "../skills/notify.js";
 
 /** Persist a validated status transition and return the new row. */
 async function transition(
@@ -133,6 +134,12 @@ export async function syncAddAccess(
       entidad_id: inv.id,
       payload: { slot },
     });
+    await notifyVisitor(
+      ctx,
+      inv,
+      "Acceso activado",
+      "Tu acceso al portón ya está activo.",
+    );
     return inv;
   } catch (error) {
     return failSync(ctx, inv, RtuOperation.ADD_USER, error);

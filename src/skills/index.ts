@@ -1,5 +1,6 @@
 export * from "./context.js";
 export * from "./audit_event.js";
+export * from "./notify.js";
 export * from "./create_invitation.js";
 export * from "./update_invitation.js";
 export * from "./cancel_invitation.js";

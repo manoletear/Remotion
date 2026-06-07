@@ -96,6 +96,13 @@ test("happy path: create -> activate -> expire reaches REMOVED", async () => {
   assert.equal(removed.estado, InvitationStatus.REMOVED);
   assert.equal(removed.rtu_slot, null);
 
+  // The visitor was notified on activation (WhatsApp).
+  assert.ok(
+    (ctx.notifier as ConsoleNotifier).sent.some(
+      (m) => m.channel === "WHATSAPP" && m.to === "+56911112222",
+    ),
+  );
+
   // One add command, one remove command went to the device.
   assert.equal(sms.outbox.length, 2);
   assert.match(sms.outbox[0]!.body, /^1234A100#\+56911112222#$/);
