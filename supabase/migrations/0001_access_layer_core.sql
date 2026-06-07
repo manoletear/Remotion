@@ -82,6 +82,9 @@ create table invitaciones (
   fecha_fin           timestamptz not null,
   estado              invitation_status not null default 'CREATED',
   cancelled           boolean not null default false,
+  -- Device the access is loaded on while ACTIVE; set together with rtu_slot and
+  -- cleared on removal. Lets the DB enforce per-device slot uniqueness.
+  dispositivo_id      uuid references dispositivos (id) on delete set null,
   rtu_slot            integer,
   sync_attempts       integer not null default 0,
   last_error          text,
@@ -91,6 +94,10 @@ create table invitaciones (
 );
 create index invitaciones_propiedad_idx on invitaciones (propiedad_id);
 create index invitaciones_estado_idx on invitaciones (estado);
+-- A phonebook slot can be held by at most one invitation per device at a time.
+create unique index invitaciones_device_slot_unique
+  on invitaciones (dispositivo_id, rtu_slot)
+  where rtu_slot is not null;
 
 create table eventos (
   id          uuid primary key default gen_random_uuid(),

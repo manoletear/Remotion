@@ -19,6 +19,8 @@ export interface Invitation {
    * toward removal, never re-added.
    */
   cancelled: boolean;
+  /** Device the access is loaded on while ACTIVE; null when not loaded. */
+  dispositivo_id: string | null;
   /** RTU phonebook slot assigned while ACTIVE; null when not loaded. */
   rtu_slot: number | null;
   /** Number of failed sync attempts so far. */

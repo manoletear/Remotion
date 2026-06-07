@@ -19,6 +19,8 @@ import {
   registerCondominium,
   registerDevice,
   registerProperty,
+  registerResident,
+  updateResident,
 } from "./skills/provisioning.js";
 
 function fakeRtu(_to: string, body: string): string {
@@ -93,6 +95,13 @@ test("happy path: create -> activate -> expire reaches REMOVED", async () => {
   const removed = (await store.invitations.get(inv.id))!;
   assert.equal(removed.estado, InvitationStatus.REMOVED);
   assert.equal(removed.rtu_slot, null);
+
+  // The visitor was notified on activation (WhatsApp).
+  assert.ok(
+    (ctx.notifier as ConsoleNotifier).sent.some(
+      (m) => m.channel === "WHATSAPP" && m.to === "+56911112222",
+    ),
+  );
 
   // One add command, one remove command went to the device.
   assert.equal(sms.outbox.length, 2);
@@ -247,6 +256,41 @@ test("expireInvitation is idempotent", async () => {
   const events = await store.events.listForEntity(inv.id, 100);
   const expiredCount = events.filter((e) => e.tipo === "INVITATION_EXPIRED").length;
   assert.equal(expiredCount, 1);
+});
+
+test("updateResident changes fields and emits USER_UPDATED", async () => {
+  const { ctx, store, propertyId } = await setup();
+  const r = await registerResident(ctx, {
+    propiedad_id: propertyId,
+    nombre: "Ana",
+    telefono: "+56911110000",
+  });
+  const updated = await updateResident(ctx, {
+    id: r.id,
+    nombre: "Ana Pérez",
+    telefono: "9 2222 3333",
+  });
+  assert.equal(updated.nombre, "Ana Pérez");
+  assert.equal(updated.telefono, "+56922223333");
+  const events = await store.events.listForEntity(r.id, 50);
+  assert.ok(events.some((e) => e.tipo === "USER_UPDATED"));
+});
+
+test("concurrent active invitations get distinct device slots", async () => {
+  const { ctx, store, propertyId } = await setup();
+  const w = window();
+  const common = { fecha_inicio: w.fecha_inicio, fecha_fin: w.fecha_fin, propiedad_id: propertyId };
+  const a = await createInvitation(ctx, { ...common, visitante_nombre: "A", visitante_telefono: "+56911110001" });
+  const b = await createInvitation(ctx, { ...common, visitante_nombre: "B", visitante_telefono: "+56911110002" });
+
+  await tick(ctx, w.start); // both activations due in the same tick
+
+  const ia = (await store.invitations.get(a.id))!;
+  const ib = (await store.invitations.get(b.id))!;
+  assert.equal(ia.estado, InvitationStatus.ACTIVE);
+  assert.equal(ib.estado, InvitationStatus.ACTIVE);
+  assert.equal(ia.dispositivo_id, ib.dispositivo_id); // same device
+  assert.notEqual(ia.rtu_slot, ib.rtu_slot); // distinct slots
 });
 
 test("invalid validity window is rejected", async () => {

@@ -4,6 +4,7 @@ import { EntityType, EventType, InvitationStatus } from "../shared/enums.js";
 import { NotFoundError } from "../shared/errors.js";
 import { auditEvent } from "./audit_event.js";
 import type { SkillContext } from "./context.js";
+import { notifyVisitor } from "./notify.js";
 
 /**
  * Expire Invitation skill. Fires when the validity window ends. Records the
@@ -37,6 +38,7 @@ export async function expireInvitation(
     payload: { fecha_fin: inv.fecha_fin },
   });
 
+  await notifyVisitor(ctx, inv, "Acceso expirado", "Tu acceso al portón ha expirado.");
   await ctx.scheduler.cancel(inv.id);
   return syncRemoveAccess(ctx, inv.id);
 }

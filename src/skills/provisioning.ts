@@ -2,6 +2,7 @@ import type { Condominium } from "../domain/condominium/index.js";
 import type { Device } from "../domain/device/index.js";
 import type { Property } from "../domain/property/index.js";
 import type { Resident } from "../domain/resident/index.js";
+import type { ResidentPatch } from "../mcp/supabase/port.js";
 import { DeviceType, EntityType, EventType } from "../shared/enums.js";
 import { NotFoundError } from "../shared/errors.js";
 import { assertRtuPassword, Validator } from "../shared/validators.js";
@@ -74,6 +75,39 @@ export async function registerResident(
     entidad: EntityType.RESIDENT,
     entidad_id: resident.id,
     payload: { propiedad_id: resident.propiedad_id },
+  });
+  return resident;
+}
+
+/**
+ * Update a resident's name and/or phone. Normalizes the phone to E.164, persists
+ * only the changed mutable fields, and emits USER_UPDATED.
+ */
+export async function updateResident(
+  ctx: SkillContext,
+  input: { id: string; nombre?: string; telefono?: string },
+): Promise<Resident> {
+  const current = await ctx.store.residents.get(input.id);
+  if (!current) throw new NotFoundError("Resident", input.id);
+
+  const v = new Validator();
+  const patch: ResidentPatch = {};
+  if (input.nombre !== undefined) {
+    v.requireNonEmpty(input.nombre, "nombre");
+    patch.nombre = input.nombre.trim();
+  }
+  if (input.telefono !== undefined) {
+    const phone = v.phone(input.telefono, "telefono");
+    if (phone) patch.telefono = phone;
+  }
+  v.throwIfInvalid();
+
+  const resident = await ctx.store.residents.update(input.id, patch);
+  await auditEvent(ctx, {
+    tipo: EventType.USER_UPDATED,
+    entidad: EntityType.RESIDENT,
+    entidad_id: resident.id,
+    payload: { changed: Object.keys(patch) },
   });
   return resident;
 }

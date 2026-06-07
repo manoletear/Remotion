@@ -4,6 +4,7 @@ import { EntityType, EventType, InvitationStatus } from "../shared/enums.js";
 import { NotFoundError } from "../shared/errors.js";
 import { auditEvent } from "./audit_event.js";
 import type { SkillContext } from "./context.js";
+import { notifyVisitor } from "./notify.js";
 
 /**
  * Cancel Invitation skill. Revokes access ahead of schedule. Cancels pending
@@ -37,5 +38,6 @@ export async function cancelInvitation(
     payload: { previous_estado: inv.estado },
   });
 
+  await notifyVisitor(ctx, inv, "Acceso cancelado", "Tu acceso al portón fue cancelado.");
   return syncRemoveAccess(ctx, inv.id);
 }

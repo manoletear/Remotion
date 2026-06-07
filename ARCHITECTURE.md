@@ -84,7 +84,9 @@ Slots `100..200` are reserved for invitations; `1..99` for permanent residents.
 - Failures land the invitation in `ERROR` with `sync_attempts` and `last_error`
   recorded; a `RETRY` job re-drives it toward its intended end state.
 - Slot assignment is deterministic and idempotent, so re-running a sync does not
-  duplicate device entries.
+  duplicate device entries. The invitation's `dispositivo_id` + `rtu_slot` are set
+  together on activation and cleared on removal, and a partial unique index on
+  `(dispositivo_id, rtu_slot)` enforces per-device slot uniqueness at the DB level.
 
 ## Persistence
 

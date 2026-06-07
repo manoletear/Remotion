@@ -43,6 +43,9 @@ export const RTU_SYNC_RETRY = {
 /** How long to wait for an RTU to acknowledge an SMS command before timing out. */
 export const RTU_ACK_TIMEOUT_MS = 60_000;
 
+/** Max time to wait on a (best-effort) visitor notification before giving up. */
+export const NOTIFY_TIMEOUT_MS = 5_000;
+
 /** Phone numbers are normalized and stored in E.164 format. */
 export const PHONE_E164_REGEX = /^\+[1-9]\d{6,14}$/;
 
