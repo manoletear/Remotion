@@ -12,7 +12,8 @@ import { assertRtuPassword } from "../../shared/validators.js";
 /** Build the command to authorize a phone number at a phonebook slot. */
 export function buildAddUserCommand(password: string, slot: number, phone: string): string {
   assertRtuPassword(password);
-  return `${password}A${pad(slot)}#${phone}#`;
+  // RTU5024 expects the number without leading '+' (e.g. 56981890493, not +56981890493).
+  return `${password}A${pad(slot)}#${phone.replace(/^\+/, "")}#`;
 }
 
 /** Build the command to delete the authorized number at a slot. */
@@ -43,14 +44,18 @@ export function parseMutationReply(reply: string | null): RtuResultStatus {
 }
 
 /**
- * Parse a query reply into the set of authorized phone numbers it reports.
- * RTU5024 list replies enumerate slots like `001:+5691...`; we extract any
- * E.164-looking tokens. Returns null on timeout.
+ * Parse a query reply into E.164 phone numbers.
+ * RTU5024 AL# replies use the format `040:56984298053` (no leading '+').
+ * We normalize each token to E.164 for comparison against DB values.
+ * Returns null on timeout.
  */
 export function parseQueryReply(reply: string | null): string[] | null {
   if (reply === null) return null;
-  const matches = reply.match(/\+[1-9]\d{6,14}/g);
-  return matches ? [...new Set(matches)] : [];
+  // Match digit sequences that look like phone numbers (7-15 digits, with or without '+').
+  const matches = reply.match(/\+?[1-9]\d{6,14}/g);
+  if (!matches) return [];
+  // Normalize to E.164: prepend '+' if missing.
+  return [...new Set(matches.map((n) => (n.startsWith("+") ? n : `+${n}`)))];
 }
 
 /** True when a queried number is present in the device's authorized list. */
