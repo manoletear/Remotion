@@ -11,6 +11,8 @@ export interface UpdateInvitationInput {
   id: string;
   visitante_nombre?: string;
   visitante_telefono?: string;
+  motivo?: string;
+  patente?: string;
   fecha_inicio?: string;
   fecha_fin?: string;
 }
@@ -49,6 +51,10 @@ export async function updateInvitation(
     v.requireNonEmpty(input.visitante_nombre, "visitante_nombre");
     patch.visitante_nombre = input.visitante_nombre.trim();
   }
+
+  // Free-text visit context: an empty string clears the field.
+  if (input.motivo !== undefined) patch.motivo = input.motivo.trim() || null;
+  if (input.patente !== undefined) patch.patente = input.patente.trim() || null;
 
   let phoneChanged = false;
   if (input.visitante_telefono !== undefined) {

@@ -56,6 +56,9 @@ export enum EventType {
   RTU_SYNC_STARTED = "RTU_SYNC_STARTED",
   RTU_SYNC_SUCCESS = "RTU_SYNC_SUCCESS",
   RTU_SYNC_FAILED = "RTU_SYNC_FAILED",
+  /** An authorized number on the device that no active invitation explains
+   *  (salvaged Condogate ActionStatus.SECURITY_RISK). Flagged, not auto-removed. */
+  RTU_SECURITY_RISK = "RTU_SECURITY_RISK",
   USER_CREATED = "USER_CREATED",
   USER_UPDATED = "USER_UPDATED",
   PROPERTY_CREATED = "PROPERTY_CREATED",

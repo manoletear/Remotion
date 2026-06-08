@@ -11,6 +11,12 @@ export interface CreateInvitationInput {
   visitante_telefono: string;
   fecha_inicio: string;
   fecha_fin: string;
+  /** Optional reason for the visit. */
+  motivo?: string;
+  /** Optional vehicle license plate. */
+  patente?: string;
+  /** Resident who created the invitation, for attribution. */
+  creado_por?: string;
 }
 
 /**
@@ -43,6 +49,9 @@ export async function createInvitation(
     propiedad_id: input.propiedad_id,
     visitante_nombre: input.visitante_nombre.trim(),
     visitante_telefono: phone!,
+    motivo: input.motivo?.trim() || null,
+    patente: input.patente?.trim() || null,
+    creado_por: input.creado_por ?? null,
     fecha_inicio: start.toISOString(),
     fecha_fin: end.toISOString(),
   });

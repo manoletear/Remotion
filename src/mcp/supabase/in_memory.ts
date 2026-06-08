@@ -82,6 +82,8 @@ export class InMemoryDataStore implements DataStore {
         propiedad_id: input.propiedad_id,
         nombre: input.nombre,
         telefono: input.telefono,
+        apellido: input.apellido ?? null,
+        avatar_url: input.avatar_url ?? null,
         created_at: nowIso(),
       };
       this._residents.set(row.id, row);
@@ -125,6 +127,8 @@ export class InMemoryDataStore implements DataStore {
         propiedad_id: input.propiedad_id,
         visitante_nombre: input.visitante_nombre,
         visitante_telefono: input.visitante_telefono,
+        motivo: input.motivo ?? null,
+        patente: input.patente ?? null,
         fecha_inicio: input.fecha_inicio,
         fecha_fin: input.fecha_fin,
         estado: InvitationStatus.CREATED,
@@ -134,6 +138,7 @@ export class InMemoryDataStore implements DataStore {
         sent_at: null,
         sync_attempts: 0,
         last_error: null,
+        creado_por: input.creado_por ?? null,
         created_at: ts,
         updated_at: ts,
       };

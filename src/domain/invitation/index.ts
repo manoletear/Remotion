@@ -8,6 +8,10 @@ export interface Invitation {
   visitante_nombre: string;
   /** E.164 phone number authorized to operate the gate. */
   visitante_telefono: string;
+  /** Optional reason for the visit (salvaged Condogate `guestReason`). */
+  motivo: string | null;
+  /** Optional vehicle license plate for the visit (salvaged `carPlate`). */
+  patente: string | null;
   /** ISO-8601 start of the validity window. */
   fecha_inicio: string;
   /** ISO-8601 end of the validity window. */
@@ -33,6 +37,8 @@ export interface Invitation {
   sync_attempts: number;
   /** Last sync error message, when estado === ERROR. */
   last_error: string | null;
+  /** Resident who created the invitation; null when system-generated (salvaged `createdBy`). */
+  creado_por: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,7 +50,8 @@ export type NewInvitation = Pick<
   | "visitante_telefono"
   | "fecha_inicio"
   | "fecha_fin"
->;
+> &
+  Partial<Pick<Invitation, "motivo" | "patente" | "creado_por">>;
 
 /**
  * Allowed state transitions for an invitation.

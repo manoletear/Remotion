@@ -35,7 +35,9 @@ export interface PropertyRepository {
 }
 
 /** Editable fields of a resident after creation. */
-export type ResidentPatch = Partial<Pick<Resident, "nombre" | "telefono">>;
+export type ResidentPatch = Partial<
+  Pick<Resident, "nombre" | "telefono" | "apellido" | "avatar_url">
+>;
 
 export interface ResidentRepository {
   create(input: NewResident): Promise<Resident>;
@@ -69,6 +71,8 @@ export type InvitationPatch = Partial<
     | "last_error"
     | "visitante_nombre"
     | "visitante_telefono"
+    | "motivo"
+    | "patente"
     | "fecha_inicio"
     | "fecha_fin"
   >
