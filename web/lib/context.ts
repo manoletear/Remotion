@@ -1,74 +1,37 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ConsoleNotifier,
-  FakeSmsGateway,
-  InMemoryDataStore,
-  InMemoryScheduler,
+  SupabaseDataStore,
+  SupabaseScheduler,
+  TwilioSmsGateway,
   makeContext,
-  registerCondominium,
-  registerDevice,
-  registerProperty,
-  registerResident,
   type SkillContext,
 } from "gsm-gate-access-layer";
 
+import { createServiceClient } from "./supabase";
+
+function env(key: string): string {
+  const v = process.env[key];
+  if (!v) throw new Error(`Missing env var: ${key}`);
+  return v;
+}
+
 /**
- * Server-side context factory for the resident web app.
+ * Build a SkillContext for a resident server action or component.
  *
- * P0-M0: wired against the in-memory / fake adapters so the UI works end-to-end
- * with zero external services. The ONLY thing that changes to go "Supabase real"
- * is this factory (swap InMemoryDataStore -> SupabaseDataStore, FakeSmsGateway ->
- * TwilioSmsGateway, InMemoryScheduler -> SupabaseScheduler). Everything above —
- * pages, server actions, skills — stays identical.
- *
- * DEV-ONLY: the in-memory store lives in a single process and does NOT persist
- * across serverless invocations. This factory is for local development/demo; the
- * deploy target is always the Supabase-backed context.
+ * - store: session client → RLS enforced (resident sees only their rows).
+ * - scheduler: service role → writes jobs (no RLS write policy for authenticated users).
+ * - sms: Twilio outbound for RTU commands.
  */
-export interface Bootstrap {
-  ctx: SkillContext;
-  /** The seeded resident's property; stands in for the logged-in session until auth (M2). */
-  propertyId: string;
-  residentId: string;
-}
-
-/** Canned RTU replies so the fake "device" accepts add/remove/list commands. */
-function fakeRtu(_to: string, body: string): string {
-  if (body.includes("AL#")) return "list: 100:+56911112222";
-  if (body.endsWith("##")) return "Delete success";
-  return "Add success";
-}
-
-async function bootstrap(): Promise<Bootstrap> {
-  const ctx = makeContext({
-    store: new InMemoryDataStore(),
-    sms: new FakeSmsGateway(fakeRtu),
-    scheduler: new InMemoryScheduler(),
+export function makeServerContext(sessionClient: SupabaseClient): SkillContext {
+  return makeContext({
+    store: new SupabaseDataStore(sessionClient),
+    sms: new TwilioSmsGateway({
+      accountSid: env("TWILIO_ACCOUNT_SID"),
+      authToken: env("TWILIO_AUTH_TOKEN"),
+      from: env("TWILIO_FROM"),
+    }),
+    scheduler: new SupabaseScheduler(createServiceClient()),
     notifier: new ConsoleNotifier(),
   });
-
-  const condo = await registerCondominium(ctx, { nombre: "Condominio Demo" });
-  const property = await registerProperty(ctx, {
-    condominio_id: condo.id,
-    numero: "Casa 1",
-  });
-  await registerDevice(ctx, {
-    condominio_id: condo.id,
-    numero_sim: "+56922223333",
-  });
-  const resident = await registerResident(ctx, {
-    propiedad_id: property.id,
-    nombre: "Residente Demo",
-    telefono: "+56911110000",
-  });
-
-  return { ctx, propertyId: property.id, residentId: resident.id };
-}
-
-// Persist the in-memory bootstrap across hot reloads / requests within the
-// running server process (a single shared demo tenant for M0).
-const globalForCtx = globalThis as unknown as { __gateBootstrap?: Promise<Bootstrap> };
-
-export function getContext(): Promise<Bootstrap> {
-  globalForCtx.__gateBootstrap ??= bootstrap();
-  return globalForCtx.__gateBootstrap;
 }
