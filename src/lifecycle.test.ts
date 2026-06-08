@@ -7,8 +7,9 @@ import { FakeSmsGateway } from "./mcp/sms_gateway/fake.js";
 import { InMemoryScheduler } from "./mcp/scheduler/in_memory.js";
 import { InMemoryDataStore } from "./mcp/supabase/in_memory.js";
 import { tick } from "./orchestration/invitation_lifecycle.js";
+import { reconcileDevicePhonebook } from "./orchestration/phonebook_audit.js";
 import { RTU_ACK_TIMEOUT_MS } from "./shared/constants.js";
-import { InvitationStatus } from "./shared/enums.js";
+import { EventType, InvitationStatus } from "./shared/enums.js";
 import { normalizePhone } from "./shared/utils.js";
 import { cancelInvitation } from "./skills/cancel_invitation.js";
 import { makeContext, type SkillContext } from "./skills/context.js";
@@ -306,4 +307,44 @@ test("invalid validity window is rejected", async () => {
     }),
     /validity window/i,
   );
+});
+
+test("phonebook audit flags unexplained device numbers as RTU_SECURITY_RISK", async () => {
+  const { ctx, store, propertyId } = await setup();
+  const device = (await store.devices.getForProperty(propertyId))!;
+
+  // A permanent resident and an active visitor — both legitimately authorized.
+  await registerResident(ctx, {
+    propiedad_id: propertyId,
+    nombre: "Resident",
+    telefono: "+56911110000",
+  });
+  const w = window();
+  const inv = await createInvitation(ctx, {
+    propiedad_id: propertyId,
+    visitante_nombre: "Visitor",
+    visitante_telefono: "+56911112222",
+    fecha_inicio: w.fecha_inicio,
+    fecha_fin: w.fecha_fin,
+  });
+  await tick(ctx, w.start); // visitor ACTIVE on the device
+
+  // The device reports an extra number nobody created through the app.
+  const orphan = "+56999998888";
+  const orphans = await reconcileDevicePhonebook(ctx, device, [
+    "+56911110000", // resident
+    "+56911112222", // active visitor
+    orphan,
+  ]);
+
+  assert.deepEqual(orphans, [orphan]);
+
+  const risks = (await store.events.listForEntity(device.id)).filter(
+    (e) => e.tipo === EventType.RTU_SECURITY_RISK,
+  );
+  assert.equal(risks.length, 1);
+  assert.equal(risks[0]!.payload.phone, orphan);
+
+  // The flag does NOT remove the legitimate visitor.
+  assert.equal((await store.invitations.get(inv.id))!.estado, InvitationStatus.ACTIVE);
 });
