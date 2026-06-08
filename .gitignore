@@ -1,6 +1,12 @@
 node_modules/
 dist/
 *.log
+
+# Next.js / web app
+.next/
+next-env.d.ts
+*.tsbuildinfo
+
 .env
 .env.*
 !.env.example
