@@ -1,9 +1,10 @@
 # MCP Servers — Setup
 
-Este repo incluye un `.mcp.json` con dos servidores MCP para Claude Code:
+Este repo incluye un `.mcp.json` con tres servidores MCP para Claude Code:
 
 1. **`magic`** — Magic MCP de [21st.dev](https://21st.dev) (generación de componentes UI).
 2. **`github`** — Servidor oficial de GitHub MCP (repos, PRs, issues, code search).
+3. **`pixa`** — [Pixa MCP](https://pixa.com) (generar imágenes y video, quitar fondo, upscale 4x, borrar objetos, librería de assets).
 
 > Los secretos **no** se guardan en el repo. `.mcp.json` usa expansión de
 > variables de entorno (`${VAR}`), que Claude Code resuelve en tiempo de ejecución.
@@ -55,6 +56,17 @@ y exporta tu token:
 export GITHUB_PERSONAL_ACCESS_TOKEN="ghp_..."
 ```
 
+## 3. Pixa MCP
+
+Servidor remoto (`https://mcp.pixa.com/mcp`) que añade 6 herramientas: generación de
+imágenes, generación de video, quitar fondo, upscale 4x, borrar objetos y librería de assets.
+
+- **No requiere API key local** ni instalación por npm.
+- Crea una cuenta gratis en https://pixa.com.
+- Autenticación por OAuth: tras abrir Claude Code, corre `/mcp` → selecciona `pixa` → `Authenticate`.
+
+> El tier gratuito incluye créditos limitados.
+
 ## Verificar
 
 Dentro de Claude Code:
@@ -63,4 +75,4 @@ Dentro de Claude Code:
 /mcp
 ```
 
-Deberías ver `magic` y `github` como `connected`.
+Deberías ver `magic`, `github` y `pixa` como `connected`.
