@@ -5,6 +5,7 @@ Este repo incluye un `.mcp.json` con tres servidores MCP para Claude Code:
 1. **`magic`** — Magic MCP de [21st.dev](https://21st.dev) (generación de componentes UI).
 2. **`github`** — Servidor oficial de GitHub MCP (repos, PRs, issues, code search).
 3. **`pixa`** — [Pixa MCP](https://pixa.com) (generar imágenes y video, quitar fondo, upscale 4x, borrar objetos, librería de assets).
+4. **`higgsfield`** — [Higgsfield MCP](https://higgsfield.ai/mcp) (video cinemático y marketing; 30+ modelos: Soul, Kling, Veo, Seedance, Nano Banana Pro…).
 
 > Los secretos **no** se guardan en el repo. `.mcp.json` usa expansión de
 > variables de entorno (`${VAR}`), que Claude Code resuelve en tiempo de ejecución.
@@ -67,6 +68,17 @@ imágenes, generación de video, quitar fondo, upscale 4x, borrar objetos y libr
 
 > El tier gratuito incluye créditos limitados.
 
+## 4. Higgsfield MCP
+
+Servidor remoto (`https://mcp.higgsfield.ai/mcp`) orientado a video cinemático y de marketing.
+Expone tools como analizador de video, generador de video marketing, entrenamiento de
+personaje Soul, image-to-video cinemático, generador de clips virales y predicción de
+viralidad. Da acceso a 30+ modelos (Soul, Kling, Veo, Seedance, Nano Banana Pro, Cinema Studio…).
+
+- **No requiere API key**: usa login con tu cuenta de Higgsfield.
+- Crea cuenta en https://higgsfield.ai.
+- Autenticación por OAuth: `/mcp` → selecciona `higgsfield` → `Authenticate`.
+
 ## Verificar
 
 Dentro de Claude Code:
@@ -75,4 +87,4 @@ Dentro de Claude Code:
 /mcp
 ```
 
-Deberías ver `magic`, `github` y `pixa` como `connected`.
+Deberías ver `magic`, `github`, `pixa` y `higgsfield` como `connected`.

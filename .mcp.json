@@ -11,6 +11,10 @@
     "pixa": {
       "type": "http",
       "url": "https://mcp.pixa.com/mcp"
+    },
+    "higgsfield": {
+      "type": "http",
+      "url": "https://mcp.higgsfield.ai/mcp"
     }
   }
 }
