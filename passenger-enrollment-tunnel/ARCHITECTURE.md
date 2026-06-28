@@ -94,6 +94,38 @@ Las clases `.cs` del documento se mapean a tipos TypeScript en `domain/`:
 | `Hospede.cs`, `Checkin.cs` | `Hospede` + `Ficha.checkin` |
 | `Reservas.cs`, `VincularHospede.cs` | `Ficha.reservaLocalizador` + `vincularHospede` |
 
+## Lo difícil: procedencia de los datos (no es leer pasaportes)
+
+Leer pasaportes de cualquier país es la parte **fácil**: la banda **MRZ es ICAO
+9303**, un único parser cubre ~190 países. Lo difícil es:
+
+1. **Documentos sin MRZ** — el **RG brasileño** (≈27 layouts estatales) y cédulas
+   extranjeras sin banda; OCR de layout libre.
+2. **Datos que no están en NINGÚN documento** — y son obligatorios para la FNRH:
+   **domicílio** (país/estado/município), **profissão**, **motivo**, **medio de
+   transporte**, **procedencia**. Salen del **formulario**, del **PMS** o de
+   **Gov.br**, nunca del carnet.
+3. **Reconciliación de nombre / transliteración** — MRZ es A–Z sin tildes,
+   apellido primero, romanizado ("João"→"JOAO"); casar con la reserva y Gov.br.
+4. **Catálogos de dominio cerrado de SNRHos** — motivo/transporte/ciudad deben
+   mapear a códigos exactos o el envío se rechaza (4xx).
+
+El código modela esto en `domain/fnrh_requirements.ts`: cada campo declara su
+**procedencia** (`FieldSource`: DOCUMENT_MRZ / DOCUMENT_OCR / FORM / PMS / GOVBR),
+si es obligatorio y si está o no en el documento. `missingMandatoryFields()`
+alimenta un **gate de completitud** en `snrhos_sync`: si falta un campo
+off-document, el envío se **bloquea localmente** (evento `FICHA_INCOMPLETE`) en
+vez de gastar un round-trip y cosechar un 4xx — el front pide exactamente lo que
+falta.
+
+| Campo FNRH | ¿En el documento? | Procedencia |
+|---|---|---|
+| Nombre, nº doc, nacimiento, nacionalidad | Sí (MRZ/OCR) | Documento / Gov.br |
+| **Domicílio** | **No** | Formulario / PMS / Gov.br |
+| **Profissão** | **No** | Formulario / PMS / Gov.br |
+| Motivo, transporte, origen, destino | No | Formulario / PMS |
+| CPF (brasileños) | A veces | OCR / Gov.br |
+
 ## Confiabilidad y contingencia
 
 - `withRetry` reutilizado: backoff exponencial 2s/4s/8s/16s configurable.

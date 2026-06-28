@@ -1,5 +1,6 @@
 import type { Ficha } from "../domain/ficha/index.js";
 import { assertTransition } from "../domain/ficha/index.js";
+import { missingMandatoryFields } from "../domain/fnrh_requirements.js";
 import type { FichaPatch } from "../mcp/store/port.js";
 import type { SnrhosResult } from "../mcp/snrhos/port.js";
 import {
@@ -7,7 +8,11 @@ import {
   FichaStatus,
   SnrhosResultStatus,
 } from "../shared/enums.js";
-import { NotFoundError, SnrhosSyncError } from "../shared/errors.js";
+import {
+  NotFoundError,
+  SnrhosSyncError,
+  ValidationError,
+} from "../shared/errors.js";
 import { auditEvent } from "../skills/audit_event.js";
 import type { TunnelContext } from "../skills/context.js";
 
@@ -61,6 +66,20 @@ export async function registerCheckin(
   const hospede = ficha.hospede;
   if (!hospede) {
     throw new SnrhosSyncError("Ficha sin datos de huésped", false, { fichaId });
+  }
+
+  // Completeness gate: the SNRHos payload is rejected (4xx) if mandatory
+  // off-document fields (domicilio, profesión, motivo, ...) are missing. Catch
+  // it here so the desk/UX prompts for exactly what's absent instead of burning
+  // a round-trip and a rejection.
+  const missing = missingMandatoryFields(hospede);
+  if (missing.length > 0) {
+    await auditEvent(ctx, {
+      tipo: EventType.FICHA_INCOMPLETE,
+      fichaId: ficha.id,
+      payload: { missing },
+    });
+    throw new ValidationError("Ficha incompleta para SNRHos", missing);
   }
 
   if (ficha.estado !== FichaStatus.PENDING_SYNC) {

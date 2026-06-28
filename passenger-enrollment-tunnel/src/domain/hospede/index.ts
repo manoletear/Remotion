@@ -21,6 +21,21 @@ export interface Documento {
   fechaVencimiento: string | null;
 }
 
+/**
+ * Residential address (domicílio). Required by the FNRH and present on NO travel
+ * document — it must come from the form, the PMS reservation, or Gov.br.
+ */
+export interface Domicilio {
+  /** ISO-3166 country of residence. */
+  pais: string;
+  estado: string;
+  municipio: string;
+  /** Street/line; optional for foreign addresses with looser structure. */
+  logradouro: string | null;
+  /** Brazilian postal code (CEP) when applicable. */
+  cep: string | null;
+}
+
 /** Mirror of `Pessoa.cs` — identity + sociodemographic classification. */
 export interface Pessoa {
   nombreCompleto: string;
@@ -30,6 +45,12 @@ export interface Pessoa {
   sexo: "M" | "F" | "X";
   nacionalidad: string;
   documento: Documento;
+  /** Profession/occupation — required by the FNRH, not on any document. */
+  profesion: string | null;
+  /** Residential address — required, not on any document. */
+  domicilio: Domicilio | null;
+  email: string | null;
+  telefono: string | null;
   /**
    * True when the identity came from Gov.br at "Oro" level: name and CPF are
    * state-validated and must be locked against edition to deter fraud.

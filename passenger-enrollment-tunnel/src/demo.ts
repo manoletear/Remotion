@@ -1,10 +1,13 @@
 /**
  * End-to-end demo of the FNRH tunnel against in-memory/fake adapters — no DB,
- * no SNRHos, no OCR engine. Mirrors the Access Layer's `src/demo.ts`.
+ * no SNRHos, no OCR engine. Club Med profile: international guest arriving by
+ * plane at a Brazilian village.
  *
- * Flow: reservation -> pre-check-in ficha -> document scan -> attempted check-in
- * during an SNRHos outage (-> CONTINGENCY) -> service recovers -> drain queue
- * (-> REGISTERED). Prints the ficha state and the LGPD audit trail.
+ * Shows the three things that actually matter:
+ *  1. The document (MRZ) gives identity but NOT domicilio/profesión.
+ *  2. Those off-document fields come from the form/PMS; if missing, the
+ *     completeness gate blocks the send (no wasted 4xx).
+ *  3. An SNRHos outage parks the ficha in CONTINGENCY and the drain recovers it.
  *
  *   npx tsx passenger-enrollment-tunnel/src/demo.ts
  */
@@ -13,8 +16,9 @@ import { FakeSnrhos } from "./mcp/snrhos/fake.js";
 import { FakeOcr } from "./mcp/ocr/fake.js";
 import { makeContext } from "./skills/context.js";
 import { createFicha } from "./skills/create_ficha.js";
-import { scanDocument } from "./skills/scan_document.js";
+import { scanDocument, type ComplementaryData } from "./skills/scan_document.js";
 import { registerCheckin, drainContingency } from "./orchestration/snrhos_sync.js";
+import { OFF_DOCUMENT_MANDATORY } from "./domain/fnrh_requirements.js";
 import {
   DocumentType,
   MedioTransporte,
@@ -22,48 +26,85 @@ import {
   SnrhosResultStatus,
 } from "./shared/enums.js";
 
+const estadisticos = {
+  motivoViaje: MotivoViaje.TURISMO,
+  medioTransporte: MedioTransporte.AVION,
+  puntoOrigen: "Buenos Aires",
+  proximoDestino: "Rio de Janeiro",
+};
+
+/** What the form/PMS supplies — none of this is on the passport. */
+const complementariosCompletos: ComplementaryData = {
+  profesion: "Ingeniera",
+  domicilio: {
+    pais: "ARG",
+    estado: "Buenos Aires",
+    municipio: "CABA",
+    logradouro: "Av. Corrientes 1234",
+    cep: null,
+  },
+  email: "ana@example.com",
+  telefono: "+5491150001234",
+};
+
 async function main(): Promise<void> {
   const store = new InMemoryStore();
   const snrhos = new FakeSnrhos();
   const ocr = new FakeOcr();
   const ctx = makeContext({ store, snrhos, ocr });
 
-  // 1) PMS "reservation created" -> ficha in DRAFT + (real adapter) link sent.
+  console.log(
+    "Campos OBLIGATORIOS que NO están en ningún documento:\n  " +
+      OFF_DOCUMENT_MANDATORY.map((f) => f.label).join("\n  ") +
+      "\n",
+  );
+
+  // --- Caso A: huésped completo, con caída de SNRHos en medio ---
   const ficha = await createFicha(ctx, {
-    reservaLocalizador: "RSV-2026-0420",
+    reservaLocalizador: "CM-TRANCOSO-0420",
     contactoTitular: "+5521999990000",
   });
-  console.log(`1. Ficha creada       -> ${ficha.estado}`);
+  console.log(`A1. Ficha creada (Club Med Trancoso) -> ${ficha.estado}`);
 
-  // 2) Guest scans passport + completes the 2-tap statistical form.
-  const captured = await scanDocument(ctx, {
+  await scanDocument(ctx, {
     fichaId: ficha.id,
     scan: { image: "<bytes>", hint: DocumentType.PASSPORT },
-    estadisticos: {
-      motivoViaje: MotivoViaje.TURISMO,
-      medioTransporte: MedioTransporte.AVION,
-      puntoOrigen: "Buenos Aires",
-      proximoDestino: "Rio de Janeiro",
-    },
+    estadisticos,
+    complementarios: complementariosCompletos,
   });
-  console.log(`2. Documento escaneado -> ${captured.estado}`);
+  console.log("A2. Pasaporte (MRZ) + formulario (domicilio/profesión) -> CAPTURED");
 
-  // 3) SNRHos is down (5xx): the desk must not be blocked -> CONTINGENCY.
   snrhos.nextResults.push({ status: SnrhosResultStatus.SERVER_ERROR, httpStatus: 503 });
   const contingency = await registerCheckin(ctx, ficha.id);
   console.log(
-    `3. Check-in con Serpro caído -> ${contingency.estado} (llave entregada igual)`,
+    `A3. Check-in con Serpro caído -> ${contingency.estado} (llave entregada igual)`,
   );
 
-  // 4) SNRHos recovers: drain the queue, regularizing the legal state.
-  const { drained, pending } = await drainContingency(ctx);
-  const finalFicha = await store.fichas.get(ficha.id);
+  const { drained } = await drainContingency(ctx);
+  const finalA = await store.fichas.get(ficha.id);
   console.log(
-    `4. Cola drenada (${drained} ok, ${pending} pend.) -> ${finalFicha?.estado}` +
-      ` (protocolo ${finalFicha?.protocoloSnrhos})`,
+    `A4. Cola drenada (${drained} ok) -> ${finalA?.estado} (protocolo ${finalA?.protocoloSnrhos})\n`,
   );
 
-  console.log("\nBitácora LGPD (sin PII):");
+  // --- Caso B: falta el domicilio -> el gate de completitud bloquea el envío ---
+  const fichaB = await createFicha(ctx, {
+    reservaLocalizador: "CM-RIODASPEDRAS-0420",
+    contactoTitular: "+5521988887777",
+  });
+  await scanDocument(ctx, {
+    fichaId: fichaB.id,
+    scan: { image: "<bytes>", hint: DocumentType.PASSPORT },
+    estadisticos,
+    complementarios: { ...complementariosCompletos, domicilio: null, profesion: null },
+  });
+  try {
+    await registerCheckin(ctx, fichaB.id);
+  } catch (err) {
+    const issues = (err as { issues?: string[] }).issues ?? [];
+    console.log(`B. Sin domicilio/profesión -> envío BLOQUEADO. Falta: ${issues.join(", ")}`);
+  }
+
+  console.log("\nBitácora LGPD (sin PII) de la ficha A:");
   for (const e of await store.events.listForFicha(ficha.id)) {
     console.log(`  - ${e.tipo} ${JSON.stringify(e.payload)}`);
   }

@@ -3,6 +3,7 @@ import { assertTransition } from "../domain/ficha/index.js";
 import type {
   DatosEstadisticos,
   Dependiente,
+  Domicilio,
   Hospede,
 } from "../domain/hospede/index.js";
 import type { ExtractedIdentity, ScanRequest } from "../mcp/ocr/port.js";
@@ -11,10 +12,23 @@ import { DocumentScanError, NotFoundError } from "../shared/errors.js";
 import { auditEvent } from "./audit_event.js";
 import type { TunnelContext } from "./context.js";
 
+/**
+ * Off-document data (domicilio, profesión, contacto) sourced from the form or
+ * the PMS reservation — never from the identity document.
+ */
+export interface ComplementaryData {
+  profesion: string | null;
+  domicilio: Domicilio | null;
+  email: string | null;
+  telefono: string | null;
+}
+
 export interface ScanDocumentInput {
   fichaId: string;
   scan: ScanRequest;
   estadisticos: DatosEstadisticos;
+  /** Fields not present on any document; supplied by form/PMS/Gov.br. */
+  complementarios: ComplementaryData;
   dependientes?: Dependiente[];
 }
 
@@ -23,9 +37,13 @@ function isMrzDocument(type: DocumentType | undefined): boolean {
   return type === DocumentType.PASSPORT || type === DocumentType.MERCOSUR_ID;
 }
 
-/** Assemble the SNRHos `Hospede` from an extracted identity + form fields. */
+/**
+ * Assemble the SNRHos `Hospede` by merging sources: identity from the document
+ * (MRZ/OCR/Gov.br), and the off-document fields from the form/PMS.
+ */
 function toHospede(
   identity: ExtractedIdentity,
+  complementarios: ComplementaryData,
   estadisticos: DatosEstadisticos,
   dependientes: Dependiente[],
 ): Hospede {
@@ -42,6 +60,10 @@ function toHospede(
         paisEmision: identity.paisEmision,
         fechaVencimiento: identity.fechaVencimiento,
       },
+      profesion: complementarios.profesion,
+      domicilio: complementarios.domicilio,
+      email: complementarios.email,
+      telefono: complementarios.telefono,
       identidadVerificadaGovBr: identity.fromGovBr,
     },
     estadisticos,
@@ -83,6 +105,7 @@ export async function scanDocument(
 
   const hospede = toHospede(
     identity,
+    input.complementarios,
     input.estadisticos,
     input.dependientes ?? [],
   );

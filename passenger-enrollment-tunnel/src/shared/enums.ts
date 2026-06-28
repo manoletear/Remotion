@@ -67,12 +67,30 @@ export enum EventType {
   FICHA_CAPTURED = "FICHA_CAPTURED",
   FICHA_CANCELLED = "FICHA_CANCELLED",
   FICHA_CHECKED_OUT = "FICHA_CHECKED_OUT",
+  FICHA_INCOMPLETE = "FICHA_INCOMPLETE",
   SNRHOS_SYNC_STARTED = "SNRHOS_SYNC_STARTED",
   SNRHOS_SYNC_SUCCESS = "SNRHOS_SYNC_SUCCESS",
   SNRHOS_SYNC_REJECTED = "SNRHOS_SYNC_REJECTED",
   CONTINGENCY_ENQUEUED = "CONTINGENCY_ENQUEUED",
   CONTINGENCY_DRAINED = "CONTINGENCY_DRAINED",
   DOCUMENT_SCANNED = "DOCUMENT_SCANNED",
+}
+
+/**
+ * Where each FNRH field comes from. The crux of the tunnel: most mandatory
+ * fields are NOT on the identity document and must be sourced elsewhere.
+ */
+export enum FieldSource {
+  /** Read from the passport/ID MRZ band (ICAO 9303). */
+  DOCUMENT_MRZ = "DOCUMENT_MRZ",
+  /** Read by OCR from a non-MRZ document (CNH/RG). */
+  DOCUMENT_OCR = "DOCUMENT_OCR",
+  /** Typed by the guest in the complementary form. */
+  FORM = "FORM",
+  /** Carried by the PMS reservation. */
+  PMS = "PMS",
+  /** Imported from Gov.br at "Oro" level (state-validated). */
+  GOVBR = "GOVBR",
 }
 
 /** FNRH statistical fields (dominio cerrado del catálogo SNRHos). */
