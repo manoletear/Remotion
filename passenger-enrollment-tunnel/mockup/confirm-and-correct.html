@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Check-in · Confirme sus datos</title>
+  <style>
+    :root {
+      --brand: #0a7d5a;       /* Club Med-ish green */
+      --brand-dark: #075e43;
+      --bg: #f4f6f5;
+      --card: #ffffff;
+      --line: #e2e7e4;
+      --muted: #6b7770;
+      --ok: #0a7d5a;
+      --warn: #b46a00;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg); color: #1b211e; display: flex; justify-content: center;
+      padding: 24px;
+    }
+    .phone { width: 420px; max-width: 100%; }
+    .header { text-align: center; margin-bottom: 16px; }
+    .header .villa { color: var(--brand-dark); font-weight: 700; letter-spacing: .5px; }
+    .header h1 { font-size: 20px; margin: 6px 0 2px; }
+    .header p { margin: 0; color: var(--muted); font-size: 13px; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+      padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,.04); margin-bottom: 14px;
+    }
+    .scanned-note {
+      display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ok);
+      background: #eaf6f1; border-radius: 10px; padding: 8px 10px; margin-bottom: 14px;
+    }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+    input, select {
+      width: 100%; padding: 11px 12px; font-size: 15px; border: 1px solid var(--line);
+      border-radius: 10px; background: #fff; color: #1b211e;
+    }
+    input:focus, select:focus { outline: 2px solid var(--brand); border-color: var(--brand); }
+    .locked { background: #f1f3f2; color: #5a635e; }
+    .row { display: flex; gap: 10px; }
+    .row > div { flex: 1; }
+    .tag {
+      font-size: 10px; text-transform: uppercase; letter-spacing: .4px;
+      padding: 2px 6px; border-radius: 6px; vertical-align: middle; margin-left: 6px;
+    }
+    .tag-doc { background: #eaf6f1; color: var(--brand-dark); }
+    .tag-form { background: #fff4e3; color: var(--warn); }
+    .tag-gov { background: #e7efff; color: #234e9c; }
+    .section-title { font-size: 13px; font-weight: 600; margin: 4px 0 2px; }
+    .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .cta {
+      width: 100%; padding: 14px; font-size: 16px; font-weight: 700; color: #fff;
+      background: var(--brand); border: none; border-radius: 12px; cursor: pointer;
+    }
+    .cta:hover { background: var(--brand-dark); }
+    .foot { text-align: center; font-size: 11px; color: var(--muted); margin-top: 10px; }
+    .legend { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
+    .legend .tag { margin-left: 0; margin-right: 4px; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="header">
+      <div class="villa">CLUB MED · TRANCOSO</div>
+      <h1>Confirme sus datos</h1>
+      <p>Ya casi está. Revise lo que leímos de su pasaporte y corrija si hace falta.</p>
+    </div>
+
+    <form class="card" onsubmit="return false;">
+      <div class="scanned-note">✓ Leímos su pasaporte automáticamente — solo confirme.</div>
+
+      <div class="section-title">Identidad <span class="tag tag-doc">del documento</span></div>
+
+      <label>Nombre completo <span class="hint">(repusimos las tildes)</span></label>
+      <input type="text" value="Ana María Silva" />
+
+      <div class="row">
+        <div>
+          <label>N.º de documento</label>
+          <input class="locked" type="text" value="FH1234567" readonly />
+        </div>
+        <div>
+          <label>Nacionalidad</label>
+          <input class="locked" type="text" value="Argentina (ARG)" readonly />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Fecha de nacimiento</label>
+          <input class="locked" type="text" value="12/05/1990" readonly />
+        </div>
+        <div>
+          <label>Sexo</label>
+          <input class="locked" type="text" value="F" readonly />
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:16px;">
+        Datos que el gobierno pide <span class="tag tag-form">no están en el pasaporte</span>
+      </div>
+
+      <label>Profesión</label>
+      <input type="text" placeholder="Ej.: Ingeniera" value="Ingeniera" />
+
+      <label>Motivo del viaje</label>
+      <select>
+        <option value="TURISMO" selected>Turismo</option>
+        <option value="NEGOCIOS">Negocios</option>
+        <option value="EVENTOS">Eventos</option>
+        <option value="SALUD">Salud</option>
+        <option value="OTROS">Otros</option>
+      </select>
+
+      <label>Medio de transporte</label>
+      <select>
+        <option value="AVION" selected>Avión</option>
+        <option value="AUTOMOVIL">Automóvil</option>
+        <option value="AUTOBUS">Autobús</option>
+        <option value="BARCO">Barco</option>
+        <option value="OTRO">Otro</option>
+      </select>
+
+      <div class="section-title" style="margin-top:16px;">Domicilio</div>
+      <div class="row">
+        <div>
+          <label>País</label>
+          <input type="text" value="Argentina" />
+        </div>
+        <div>
+          <label>Ciudad</label>
+          <input type="text" value="Buenos Aires" />
+        </div>
+      </div>
+
+      <label style="margin-top:16px;"></label>
+      <button class="cta">Confirmar y hacer check-in</button>
+      <div class="foot">Tiempo estimado: menos de 60 segundos · Sus datos viajan cifrados (LGPD)</div>
+    </form>
+
+    <div class="legend">
+      <div><span class="tag tag-doc">del documento</span> leído de la cámara (pasaporte / MRZ)</div>
+      <div><span class="tag tag-form">no están en el pasaporte</span> los completa el formulario o la reserva</div>
+      <div><span class="tag tag-gov">Gov.br</span> validado por el Estado (nombre/CPF bloqueados)</div>
+    </div>
+  </div>
+</body>
+</html>
