@@ -57,6 +57,10 @@ class InMemoryFichas implements FichaRepository {
       .filter((f) => f.estado === status)
       .map((f) => ({ ...f }));
   }
+
+  async listAll(): Promise<Ficha[]> {
+    return [...this.rows.values()].map((f) => ({ ...f }));
+  }
 }
 
 class InMemoryEvents implements EventRepository {

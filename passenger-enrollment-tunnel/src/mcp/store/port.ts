@@ -27,6 +27,8 @@ export interface FichaRepository {
   update(id: string, patch: FichaPatch): Promise<Ficha>;
   /** Fichas currently in a status (for the contingency drain to act on). */
   listByStatus(status: FichaStatus): Promise<Ficha[]>;
+  /** Every ficha (for reporting / Excel export). */
+  listAll(): Promise<Ficha[]>;
 }
 
 /** An immutable audit record — basis of the LGPD log. */

@@ -11,6 +11,7 @@
  *
  *   npx tsx passenger-enrollment-tunnel/src/demo.ts
  */
+import { mkdir } from "node:fs/promises";
 import { InMemoryStore } from "./mcp/store/in_memory.js";
 import { FakeSnrhos } from "./mcp/snrhos/fake.js";
 import { FakeOcr } from "./mcp/ocr/fake.js";
@@ -21,6 +22,7 @@ import { scanDocument, type ComplementaryData } from "./skills/scan_document.js"
 import { confirmFicha } from "./skills/confirm_ficha.js";
 import { registerCheckin, drainContingency } from "./orchestration/snrhos_sync.js";
 import { OFF_DOCUMENT_MANDATORY } from "./domain/fnrh_requirements.js";
+import { writeFichasXlsx } from "./reporting/excel_export.js";
 import {
   DocumentType,
   MedioTransporte,
@@ -125,6 +127,14 @@ async function main(): Promise<void> {
   for (const e of await store.events.listForFicha(ficha.id)) {
     console.log(`  - ${e.tipo} ${JSON.stringify(e.payload)}`);
   }
+
+  // Export interino: toda la data de las fichas a un Excel (.xlsx).
+  const outDir = new URL("../out/", import.meta.url);
+  await mkdir(outDir, { recursive: true });
+  const xlsxPath = new URL("fichas.xlsx", outDir);
+  const fichas = await store.fichas.listAll();
+  await writeFichasXlsx(fichas, xlsxPath.pathname);
+  console.log(`\nExcel generado (${fichas.length} fichas): ${xlsxPath.pathname}`);
 }
 
 main().catch((err) => {

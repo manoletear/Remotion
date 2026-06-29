@@ -35,7 +35,9 @@ passenger-enrollment-tunnel/
     mcp/           ports + fakes: snrhos (API REST), ocr (OCR/MRZ)
     skills/        casos de uso: scan_document, create_ficha
     orchestration/ snrhos_sync (motor con contingencia offline)
-    demo.ts        ciclo pre-checkin -> scan -> registro -> contingencia
+    reporting/     export a Excel (.xlsx) de todas las fichas
+    demo.ts        ciclo pre-checkin -> scan -> confirmar -> registro -> Excel
+  mockup/          pantalla "confirmar y corregir" (HTML, abrir en navegador)
   STACK.md         análisis de stack (qué y por qué)
   ARCHITECTURE.md  documento técnico + diagrama + máquina de estados
   tsconfig.json    typecheck aislado del subproyecto
@@ -52,4 +54,13 @@ dependen solo de **ports**.
 ```bash
 # desde la raíz del repo
 npx tsx passenger-enrollment-tunnel/src/demo.ts
+# genera passenger-enrollment-tunnel/out/fichas.xlsx con toda la data
 ```
+
+## Export a Excel (paso intermedio)
+
+Mientras el cliente HTTP real de SNRHos y el conector Gov.br no estén en
+producción, `reporting/excel_export.ts` vuelca **toda la data de las fichas a un
+`.xlsx`** (una fila por huésped, ~28 columnas FNRH) para respaldo, auditoría o
+carga manual. ⚠️ LGPD: ese archivo contiene PII completa — guardar cifrado y con
+acceso restringido (a diferencia de la bitácora, que no lleva PII).
