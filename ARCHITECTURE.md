@@ -68,6 +68,12 @@ moves throw `InvalidTransitionError`.
 
 Every step appends events (`INVITATION_*`, `RTU_SYNC_*`) to the bitácora.
 
+**Production entry points**: `tick` is invoked by `GET /api/tick` (Vercel Cron, see
+`web/vercel.json`); the device's inbound SMS reply reaches the system via `POST
+/api/sms/inbound` (Twilio webhook, signature-verified), which persists it to
+`inbound_sms` for the next `tick`'s `confirmInFlight` sweep to consume — see
+`specs/001-close-rtu-sync-loop/` for the full design of these two routes.
+
 ### RTU reconciler (dispatch / confirm)
 
 The RTU answers over SMS asynchronously, so dispatch and confirmation are

@@ -104,7 +104,8 @@ test("happy path: create -> activate -> expire reaches REMOVED", async () => {
 
   // One add command, one remove command went to the device.
   assert.equal(sms.outbox.length, 2);
-  assert.match(sms.outbox[0]!.body, /^1234A100#\+56911112222#$/);
+  // RTU5024 expects the phone without a leading '+' on the wire (see protocol.ts).
+  assert.match(sms.outbox[0]!.body, /^1234A100#56911112222#$/);
   assert.match(sms.outbox[1]!.body, /^1234A100##$/);
 });
 
@@ -230,7 +231,7 @@ test("cancellation whose removal fails retries toward removal, never re-adds", a
 test("RTU command builder rejects passwords with protocol delimiters", () => {
   assert.throws(() => buildAddUserCommand("12#4", 100, "+56911112222"), /RTU password/);
   assert.throws(() => buildAddUserCommand("A234", 100, "+56911112222"), /RTU password/);
-  assert.equal(buildAddUserCommand("1234", 100, "+56911112222"), "1234A100#+56911112222#");
+  assert.equal(buildAddUserCommand("1234", 100, "+56911112222"), "1234A100#56911112222#");
 });
 
 test("rtuAddUser rejects a non-E.164 phone", async () => {

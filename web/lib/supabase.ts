@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
@@ -18,7 +18,7 @@ export async function createSessionClient() {
   return createServerClient(env("SUPABASE_URL"), env("SUPABASE_ANON_KEY"), {
     cookies: {
       getAll: () => cookieStore.getAll(),
-      setAll: (cs) => {
+      setAll: (cs: { name: string; value: string; options: CookieOptions }[]) => {
         try {
           cs.forEach(({ name, value, options }) =>
             cookieStore.set(name, value, options),
@@ -39,4 +39,20 @@ export function createServiceClient() {
   return createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: { persistSession: false },
   });
+}
+
+/**
+ * `web/` and the `gsm-gate-access-layer` domain package each install their own
+ * copy of `@supabase/supabase-js` (there's no npm workspace linking them, so
+ * each `npm install` produces an independent `node_modules`). The two
+ * `SupabaseClient` classes are structurally identical but nominally distinct
+ * to TypeScript (it treats the class's `protected supabaseUrl` field as a
+ * different brand per copy). This cast documents that known gap at the
+ * package boundary instead of silently suppressing a real type error —
+ * the actual fix is converting the repo to npm workspaces so both directories
+ * share one hoisted `node_modules` (tracked as a follow-up, not done here to
+ * avoid restructuring dependency tooling mid-feature).
+ */
+export function crossPackageClient<T>(client: object): T {
+  return client as unknown as T;
 }
