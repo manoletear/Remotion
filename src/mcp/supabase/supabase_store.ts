@@ -129,6 +129,10 @@ export class SupabaseDataStore implements DataStore {
           .maybeSingle(),
       );
     },
+    getBySimNumber: async (numeroSim: string): Promise<Device | null> =>
+      maybeOne(
+        await this.db.from(TABLES.devices).select().eq("numero_sim", numeroSim).maybeSingle(),
+      ),
   };
 
   invitations = {

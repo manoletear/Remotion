@@ -117,6 +117,12 @@ export class InMemoryDataStore implements DataStore {
     },
     get: async (id: string) => this._devices.get(id) ?? null,
     getForProperty: async (propiedadId: string) => this.deviceForProperty(propiedadId),
+    getBySimNumber: async (numeroSim: string) => {
+      for (const device of this._devices.values()) {
+        if (device.numero_sim === numeroSim) return device;
+      }
+      return null;
+    },
   };
 
   invitations = {

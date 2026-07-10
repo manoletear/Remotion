@@ -9,7 +9,7 @@ import {
   type SkillContext,
 } from "gsm-gate-access-layer";
 
-import { createServiceClient, crossPackageClient } from "./supabase";
+import { createServiceClient } from "./supabase";
 
 function env(key: string): string {
   const v = process.env[key];
@@ -27,8 +27,7 @@ function makeTwilioGateway(serviceClient: SupabaseClient): TwilioSmsGateway {
     accountSid: env("TWILIO_ACCOUNT_SID"),
     authToken: env("TWILIO_AUTH_TOKEN"),
     from: env("TWILIO_FROM"),
-    pollInbound: (from: string, sinceIso: string) =>
-      pollInboundSms(crossPackageClient(serviceClient), from, sinceIso),
+    pollInbound: (from, sinceIso) => pollInboundSms(serviceClient, from, sinceIso),
   });
 }
 
@@ -42,9 +41,9 @@ function makeTwilioGateway(serviceClient: SupabaseClient): TwilioSmsGateway {
 export function makeServerContext(sessionClient: SupabaseClient): SkillContext {
   const serviceClient = createServiceClient();
   return makeContext({
-    store: new SupabaseDataStore(crossPackageClient(sessionClient)),
+    store: new SupabaseDataStore(sessionClient),
     sms: makeTwilioGateway(serviceClient),
-    scheduler: new SupabaseScheduler(crossPackageClient(serviceClient)),
+    scheduler: new SupabaseScheduler(serviceClient),
     notifier: new ConsoleNotifier(),
   });
 }
@@ -58,9 +57,9 @@ export function makeServerContext(sessionClient: SupabaseClient): SkillContext {
 export function makeSystemContext(): SkillContext {
   const serviceClient = createServiceClient();
   return makeContext({
-    store: new SupabaseDataStore(crossPackageClient(serviceClient)),
+    store: new SupabaseDataStore(serviceClient),
     sms: makeTwilioGateway(serviceClient),
-    scheduler: new SupabaseScheduler(crossPackageClient(serviceClient)),
+    scheduler: new SupabaseScheduler(serviceClient),
     notifier: new ConsoleNotifier(),
   });
 }

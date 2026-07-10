@@ -40,19 +40,3 @@ export function createServiceClient() {
     auth: { persistSession: false },
   });
 }
-
-/**
- * `web/` and the `gsm-gate-access-layer` domain package each install their own
- * copy of `@supabase/supabase-js` (there's no npm workspace linking them, so
- * each `npm install` produces an independent `node_modules`). The two
- * `SupabaseClient` classes are structurally identical but nominally distinct
- * to TypeScript (it treats the class's `protected supabaseUrl` field as a
- * different brand per copy). This cast documents that known gap at the
- * package boundary instead of silently suppressing a real type error —
- * the actual fix is converting the repo to npm workspaces so both directories
- * share one hoisted `node_modules` (tracked as a follow-up, not done here to
- * avoid restructuring dependency tooling mid-feature).
- */
-export function crossPackageClient<T>(client: object): T {
-  return client as unknown as T;
-}

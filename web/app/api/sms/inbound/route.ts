@@ -1,13 +1,35 @@
-import { recordInboundSms } from "gsm-gate-access-layer";
+import { EntityType, EventType, recordInboundSms } from "gsm-gate-access-layer";
 import { NextRequest, NextResponse } from "next/server";
 
-import { createServiceClient, crossPackageClient } from "@/lib/supabase";
+import { makeSystemContext } from "@/lib/context";
+import { createServiceClient } from "@/lib/supabase";
 import { verifyTwilioSignature } from "@/lib/twilio_signature";
 
 function env(key: string): string {
   const v = process.env[key];
   if (!v) throw new Error(`Missing env var: ${key}`);
   return v;
+}
+
+/**
+ * Record a rejected inbound webhook attempt against the device it claims to
+ * be from, if one is registered with that SIM — `eventos.entidad_id` is NOT
+ * NULL, so a `from` that matches no device (a fully fabricated number) still
+ * can't be written to the audit trail; that residual case is logged instead.
+ */
+async function auditRejectedInbound(from: string | undefined): Promise<void> {
+  const device = from ? await makeSystemContext().store.devices.getBySimNumber(from) : null;
+  if (!device) {
+    // eslint-disable-next-line no-console
+    console.error("Rejected inbound SMS webhook: invalid signature, unknown device", { from });
+    return;
+  }
+  await makeSystemContext().store.events.append({
+    tipo: EventType.RTU_SECURITY_RISK,
+    entidad: EntityType.DEVICE,
+    entidad_id: device.id,
+    payload: { reason: "rejected inbound webhook: invalid Twilio signature", from },
+  });
 }
 
 /**
@@ -31,15 +53,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const valid = verifyTwilioSignature(url, params, signature, env("TWILIO_AUTH_TOKEN"));
   if (!valid) {
-    // No entity to attribute this to in the audit trail: `eventos.entidad_id`
-    // is NOT NULL, and a forged request's `From` may not match any registered
-    // device — see specs/001-close-rtu-sync-loop/tasks.md T012 for the
-    // follow-up (a nullable-entity security-event path). Logged, not silently
-    // dropped, in the meantime.
-    // eslint-disable-next-line no-console
-    console.error("Rejected inbound SMS webhook: invalid Twilio signature", {
-      from: params["From"],
-    });
+    await auditRejectedInbound(params["From"]);
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
 
@@ -49,6 +63,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Missing From/Body" }, { status: 400 });
   }
 
-  await recordInboundSms(crossPackageClient(createServiceClient()), from, body);
+  await recordInboundSms(createServiceClient(), from, body);
   return NextResponse.json({ ok: true });
 }

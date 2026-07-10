@@ -234,6 +234,13 @@ test("RTU command builder rejects passwords with protocol delimiters", () => {
   assert.equal(buildAddUserCommand("1234", 100, "+56911112222"), "1234A100#56911112222#");
 });
 
+test("devices.getBySimNumber finds a device by its SIM and misses otherwise", async () => {
+  const { store, propertyId } = await setup();
+  const device = (await store.devices.getForProperty(propertyId))!;
+  assert.deepEqual(await store.devices.getBySimNumber(device.numero_sim), device);
+  assert.equal(await store.devices.getBySimNumber("+56900000000"), null);
+});
+
 test("rtuAddUser rejects a non-E.164 phone", async () => {
   const { ctx, store, propertyId } = await setup();
   const device = (await store.devices.getForProperty(propertyId))!;

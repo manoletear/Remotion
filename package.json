@@ -5,6 +5,7 @@
   "description": "Access management layer for condominiums using GSM RTU gate openers. Permiso -> Activacion -> Dispositivo.",
   "license": "UNLICENSED",
   "type": "module",
+  "workspaces": ["web"],
   "engines": {
     "node": ">=20"
   },

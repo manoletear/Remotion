@@ -51,6 +51,9 @@ export interface DeviceRepository {
   get(id: string): Promise<Device | null>;
   /** The device that serves a given property (via its condominium). */
   getForProperty(propiedadId: string): Promise<Device | null>;
+  /** The device whose SIM is this number, if any — used to attribute an
+   *  inbound SMS (legitimate or forged) to a device for the audit trail. */
+  getBySimNumber(numeroSim: string): Promise<Device | null>;
 }
 
 /**

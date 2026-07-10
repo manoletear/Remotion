@@ -133,13 +133,15 @@ unattended, against real (or realistically simulated) device replies.
 
 - [X] T012 [US3] Implemented in `web/app/api/sms/inbound/route.ts`: an invalid/missing
       signature returns `403` and `recordInboundSms` is never called (no row written).
-      **Deviation from the task as written**: did *not* reuse `RTU_SECURITY_RISK` for the
-      audit event — that enum value is device/phonebook-scoped and `eventos.entidad_id` is
-      `NOT NULL`, but a forged request's `From` may not correspond to any registered device,
-      leaving no valid id to attach the event to. Forcing a fake id would corrupt the audit
-      trail's meaning (Constitution IV). Rejected attempts are `console.error`-logged with
-      the `From` value instead — flagged explicitly as a schema gap (see Notes) rather than
-      silently satisfied.
+      **Update (closed the gap noted below on first pass)**: added
+      `DeviceRepository.getBySimNumber` (port + `SupabaseDataStore` + `InMemoryDataStore`,
+      test in `lifecycle.test.ts`) so a rejected attempt whose `From` matches a *registered*
+      device is recorded as an `RTU_SECURITY_RISK` event against that device — satisfying
+      FR-006 for the common case. The residual case (a `From` matching no device at all —
+      a fully fabricated number) still has no valid `entidad_id` to attach to (schema's
+      `eventos.entidad_id` is `NOT NULL`); that narrower case is `console.error`-logged, not
+      silently dropped, and is a reasonable place to stop rather than inventing a fake id
+      that would corrupt the audit trail (Constitution IV).
 - [X] T013 [US3] **Validated the cryptographic core directly** (not via live `curl`, which
       is blocked per T008): ran `verifyTwilioSignature` against Twilio's own published
       worked example (URL, params, AuthToken `12345`, expected signature
@@ -178,6 +180,20 @@ to point a real Twilio number at.
   redirected every unauthenticated request (including Vercel Cron hitting `/api/tick` and
   Twilio hitting `/api/sms/inbound`) to `/login`, which would have made both new routes
   unreachable in production despite being otherwise correct.
+
+### Follow-up fixes applied after the first implementation pass
+
+- **npm workspaces**: converted the repo (`"workspaces": ["web"]` in the root
+  `package.json`, `web/node_modules` and `web/package-lock.json` removed, single
+  `npm install` from the root) so `web/` and the domain package share one hoisted
+  `node_modules`. This was the "real fix" flagged as a follow-up during T005/T009 — the
+  `crossPackageClient()` cast it required has been **removed** from `web/lib/supabase.ts`,
+  `web/lib/context.ts`, and `web/app/api/sms/inbound/route.ts`; both packages'
+  `SupabaseClient` types are now the same instance again. Verified: `npm run build` (web)
+  and `npx tsc --noEmit` both clean with no casts anywhere.
+- **T012's residual gap narrowed**: added `DeviceRepository.getBySimNumber` so rejected
+  webhook attempts from a *known* device's number are now properly audited as
+  `RTU_SECURITY_RISK` events, not just logged. See the updated T012 note above.
 
 ---
 
