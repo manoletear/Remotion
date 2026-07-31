@@ -48,9 +48,9 @@ export default async function InvitationDetail({
           </tbody>
         </table>
         {!FINALIZED.has(inv.estado) && (
-          <form action={cancelarInvitacionAction} className="mt-5">
+          <form action={cancelarInvitacionAction} className="btn-circle-row">
             <input type="hidden" name="id" value={inv.id} />
-            <SubmitButton className="ghost">Cancelar invitación</SubmitButton>
+            <SubmitButton className="btn-circle large danger">Cancelar invitación</SubmitButton>
           </form>
         )}
       </section>

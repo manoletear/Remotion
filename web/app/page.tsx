@@ -67,7 +67,7 @@ export default async function Dashboard() {
                       {!FINALIZED.has(inv.estado) && (
                         <form action={cancelarInvitacionAction}>
                           <input type="hidden" name="id" value={inv.id} />
-                          <SubmitButton className="ghost">Cancelar</SubmitButton>
+                          <SubmitButton className="btn-circle small danger">Cancelar</SubmitButton>
                         </form>
                       )}
                     </td>

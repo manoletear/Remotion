@@ -63,7 +63,9 @@ export function NewInvitationForm() {
         <TimeFields prefix="fin" offsetHours={2} />
       </div>
       {state.error && <p className="field-error">{state.error}</p>}
-      <SubmitButton>Crear invitación</SubmitButton>
+      <div className="btn-circle-row">
+        <SubmitButton className="btn-circle large success">Crear invitación</SubmitButton>
+      </div>
     </form>
   );
 }

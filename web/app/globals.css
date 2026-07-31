@@ -21,6 +21,16 @@
   --neutral-bg: #2a2f3a; --neutral-fg: #9aa6bd;  /* EXPIRED / REMOVED */
   --danger-bg: #4a1f25;  --danger-fg: #fca5a5;   /* ERROR */
 
+  /* Bold, saturated action colors (SafeCard visual reference — big
+     color-coded circular buttons) — distinct from the muted status-badge
+     tokens above, which are tuned for quiet dark-UI labels, not a primary
+     call-to-action. White text on a solid, vivid fill for the same reason
+     SafeCard's own buttons use it: unambiguous at a glance, high contrast. */
+  --action-success: #1a9c52;
+  --action-success-fg: #ffffff;
+  --action-danger: #d1373f;
+  --action-danger-fg: #ffffff;
+
   /* Type scale: 12/14/16(base)/18/24/32. */
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -127,6 +137,28 @@ button.busy::after {
   button.busy::after { animation-duration: 1.2s; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Large color-coded circular action buttons (SafeCard visual reference —
+   adopted for our two real primary actions: create = positive/green, cancel
+   = destructive/red — not SafeCard's instant-open feature, see
+   specs/002-resident-portal-redesign/research.md). */
+.btn-circle {
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: var(--sp-2);
+  min-height: 0;
+}
+.btn-circle.success { background: var(--action-success); color: var(--action-success-fg); }
+.btn-circle.danger { background: var(--action-danger); color: var(--action-danger-fg); }
+.btn-circle.large { width: 128px; height: 128px; font-size: var(--text-base); }
+.btn-circle.small { width: 68px; height: 68px; font-size: var(--text-xs); }
+
+.btn-circle-row { display: flex; justify-content: center; margin-top: var(--sp-6); }
 
 .field-error {
   color: var(--danger-fg);
