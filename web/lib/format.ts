@@ -1,24 +1,30 @@
 import { InvitationStatus } from "gsm-gate-access-layer";
 
-/** Spanish label + badge color per invitation status. */
-export function statusBadge(estado: string): { label: string; bg: string; fg: string } {
+/**
+ * Spanish label + semantic badge tone per invitation status. `tone` maps to a
+ * `.badge.<tone>` class in globals.css (the design-system's semantic color
+ * tokens) — no per-call inline hex.
+ */
+export function statusBadge(
+  estado: string,
+): { label: string; tone: "info" | "progress" | "success" | "neutral" | "danger" } {
   switch (estado) {
     case InvitationStatus.CREATED:
-      return { label: "Creada", bg: "#27324a", fg: "#aab8d4" };
+      return { label: "Creada", tone: "info" };
     case InvitationStatus.PENDING_SYNC:
-      return { label: "Sincronizando", bg: "#3a3158", fg: "#c4b5fd" };
+      return { label: "Sincronizando", tone: "progress" };
     case InvitationStatus.ACTIVE:
-      return { label: "Activa", bg: "#13402c", fg: "#6ee7b7" };
+      return { label: "Activa", tone: "success" };
     case InvitationStatus.EXPIRED:
-      return { label: "Expirada", bg: "#2a2f3a", fg: "#9aa6bd" };
+      return { label: "Expirada", tone: "neutral" };
     case InvitationStatus.REMOVING:
-      return { label: "Quitando", bg: "#3a3158", fg: "#c4b5fd" };
+      return { label: "Quitando", tone: "progress" };
     case InvitationStatus.REMOVED:
-      return { label: "Removida", bg: "#2a2f3a", fg: "#9aa6bd" };
+      return { label: "Removida", tone: "neutral" };
     case InvitationStatus.ERROR:
-      return { label: "Error", bg: "#4a1f25", fg: "#fca5a5" };
+      return { label: "Error", tone: "danger" };
     default:
-      return { label: estado, bg: "#27324a", fg: "#aab8d4" };
+      return { label: estado, tone: "info" };
   }
 }
 
@@ -32,9 +38,19 @@ export function fmtDateTime(iso: string): string {
   });
 }
 
-/** `YYYY-MM-DDTHH:mm` for a datetime-local input default, offset by `hours`. */
-export function localInputValue(hours = 0): string {
+/** Default parts for the date + hour/minute/AM-PM dropdown fields, offset by `hours`. */
+export function defaultDateParts(
+  hours = 0,
+): { fecha: string; hora: string; min: string; ampm: "AM" | "PM" } {
   const d = new Date(Date.now() + hours * 3_600_000);
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  const h24 = d.getHours();
+  const hora12 = h24 % 12 || 12;
+  const minRounded = Math.floor(d.getMinutes() / 15) * 15;
+  return {
+    fecha: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+    hora: String(hora12),
+    min: p(minRounded === 60 ? 0 : minRounded),
+    ampm: h24 < 12 ? "AM" : "PM",
+  };
 }

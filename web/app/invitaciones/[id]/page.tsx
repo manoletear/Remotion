@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { fmtDateTime, statusBadge } from "@/lib/format";
 import { getCurrentResident } from "@/lib/session";
+import { SubmitButton } from "../../components/submit-button";
 import { cancelarInvitacionAction } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export default async function InvitationDetail({
           <h1>{inv.visitante_nombre}</h1>
           <p className="muted">{inv.visitante_telefono}</p>
         </div>
-        <span className="badge" style={{ background: b.bg, color: b.fg }}>{b.label}</span>
+        <span className={`badge ${b.tone}`}>{b.label}</span>
       </div>
 
       <section className="panel">
@@ -47,9 +48,9 @@ export default async function InvitationDetail({
           </tbody>
         </table>
         {!FINALIZED.has(inv.estado) && (
-          <form action={cancelarInvitacionAction} style={{ marginTop: 16 }}>
+          <form action={cancelarInvitacionAction} className="mt-5">
             <input type="hidden" name="id" value={inv.id} />
-            <button className="ghost" type="submit">Cancelar invitación</button>
+            <SubmitButton className="ghost">Cancelar invitación</SubmitButton>
           </form>
         )}
       </section>

@@ -1,12 +1,10 @@
 import Link from "next/link";
 
-import { fmtDateTime, localInputValue, statusBadge } from "@/lib/format";
+import { fmtDateTime, statusBadge } from "@/lib/format";
 import { getCurrentResident } from "@/lib/session";
-import {
-  cancelarInvitacionAction,
-  crearInvitacionAction,
-  procesarCicloAction,
-} from "./actions";
+import { SubmitButton } from "./components/submit-button";
+import { NewInvitationForm } from "./new-invitation-form";
+import { cancelarInvitacionAction } from "./actions";
 
 // Always render fresh: the in-memory store mutates on every action.
 export const dynamic = "force-dynamic";
@@ -26,40 +24,20 @@ export default async function Dashboard() {
           <h1>Mis invitaciones</h1>
           <p className="muted">{resident.nombre} · Casa 1 · Condominio Demo</p>
         </div>
-        <form action={procesarCicloAction}>
-          <button className="ghost" type="submit">Procesar ciclo ▸</button>
-        </form>
       </div>
 
       <section className="panel">
         <h2>Nueva invitación</h2>
-        <form action={crearInvitacionAction}>
-          <div className="grid2">
-            <div className="field">
-              <label htmlFor="nombre">Visitante</label>
-              <input id="nombre" name="nombre" placeholder="Nombre" required />
-            </div>
-            <div className="field">
-              <label htmlFor="telefono">Teléfono</label>
-              <input id="telefono" name="telefono" placeholder="+56 9 1111 2222" required />
-            </div>
-            <div className="field">
-              <label htmlFor="inicio">Desde</label>
-              <input id="inicio" name="inicio" type="datetime-local" defaultValue={localInputValue(0)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="fin">Hasta</label>
-              <input id="fin" name="fin" type="datetime-local" defaultValue={localInputValue(2)} required />
-            </div>
-          </div>
-          <button type="submit">Crear invitación</button>
-        </form>
+        <NewInvitationForm />
       </section>
 
       <section className="panel">
         <h2>Invitaciones ({invitations.length})</h2>
         {invitations.length === 0 ? (
-          <p className="muted">Aún no has creado invitaciones.</p>
+          <div className="empty-state">
+            <p>Aún no has creado invitaciones.</p>
+            <p className="muted">Usa el formulario de arriba para crear la primera.</p>
+          </div>
         ) : (
           <table>
             <thead>
@@ -83,15 +61,13 @@ export default async function Dashboard() {
                       {fmtDateTime(inv.fecha_inicio)} → {fmtDateTime(inv.fecha_fin)}
                     </td>
                     <td>
-                      <span className="badge" style={{ background: b.bg, color: b.fg }}>
-                        {b.label}
-                      </span>
+                      <span className={`badge ${b.tone}`}>{b.label}</span>
                     </td>
                     <td>
                       {!FINALIZED.has(inv.estado) && (
                         <form action={cancelarInvitacionAction}>
                           <input type="hidden" name="id" value={inv.id} />
-                          <button className="ghost" type="submit">Cancelar</button>
+                          <SubmitButton className="ghost">Cancelar</SubmitButton>
                         </form>
                       )}
                     </td>

@@ -34,14 +34,22 @@ function makeTwilioGateway(serviceClient: SupabaseClient): TwilioSmsGateway {
 /**
  * Build a SkillContext for a resident server action or component.
  *
- * - store: session client → RLS enforced (resident sees only their rows).
+ * - store: session client → RLS enforced (resident sees only their rows) —
+ *   EXCEPT `events`, which is sourced from the service-role store instead:
+ *   `eventos` has RLS enabled with intentionally no write policy for
+ *   authenticated users (migration 0004's design — audit writes are meant to
+ *   come from service-role skills/workers only), so skills like
+ *   `createInvitation` that call `auditEvent` mid-flow would otherwise throw
+ *   on the audit insert *after* already having written the primary row.
  * - scheduler: service role → writes jobs (no RLS write policy for authenticated users).
  * - sms: Twilio outbound for RTU commands; inbound replies polled via service role.
  */
 export function makeServerContext(sessionClient: SupabaseClient): SkillContext {
   const serviceClient = createServiceClient();
+  const sessionStore = new SupabaseDataStore(sessionClient);
+  const serviceStore = new SupabaseDataStore(serviceClient);
   return makeContext({
-    store: new SupabaseDataStore(sessionClient),
+    store: { ...sessionStore, events: serviceStore.events },
     sms: makeTwilioGateway(serviceClient),
     scheduler: new SupabaseScheduler(serviceClient),
     notifier: new ConsoleNotifier(),

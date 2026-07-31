@@ -1,29 +1,52 @@
 "use server";
 
-import {
-  cancelInvitation,
-  createInvitation,
-  tick,
-} from "gsm-gate-access-layer";
+import { cancelInvitation, createInvitation } from "gsm-gate-access-layer";
 import { revalidatePath } from "next/cache";
 
 import { getCurrentResident } from "@/lib/session";
 
-/** datetime-local (`YYYY-MM-DDTHH:mm`, local) -> ISO 8601 for the domain layer. */
-function toIso(value: FormDataEntryValue | null): string {
-  return new Date(String(value)).toISOString();
+export interface ActionState {
+  error?: string;
 }
 
-export async function crearInvitacionAction(formData: FormData): Promise<void> {
-  const { ctx, propertyId } = await getCurrentResident();
-  await createInvitation(ctx, {
-    propiedad_id: propertyId,
-    visitante_nombre: String(formData.get("nombre") ?? "").trim(),
-    visitante_telefono: String(formData.get("telefono") ?? "").trim(),
-    fecha_inicio: toIso(formData.get("inicio")),
-    fecha_fin: toIso(formData.get("fin")),
-  });
+/**
+ * Combine a `date` field with explicit hour/minute/AM-PM fields (the
+ * dropdown-based time picker in the "new invitation" form) into ISO 8601.
+ * Avoids relying on a native `datetime-local` AM/PM spinner, which is fiddly
+ * across browsers/locales.
+ */
+function toIso(formData: FormData, prefix: "inicio" | "fin"): string {
+  const fecha = String(formData.get(`${prefix}_fecha`) ?? "");
+  const hora12 = Number(formData.get(`${prefix}_hora`));
+  const minuto = Number(formData.get(`${prefix}_min`));
+  const ampm = String(formData.get(`${prefix}_ampm`) ?? "AM");
+
+  const hora24 = (hora12 % 12) + (ampm === "PM" ? 12 : 0);
+  const [year, month, day] = fecha.split("-").map(Number);
+  return new Date(year!, month! - 1, day!, hora24, minuto).toISOString();
+}
+
+export async function crearInvitacionAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  try {
+    const { ctx, propertyId } = await getCurrentResident();
+    await createInvitation(ctx, {
+      propiedad_id: propertyId,
+      visitante_nombre: String(formData.get("nombre") ?? "").trim(),
+      visitante_telefono: String(formData.get("telefono") ?? "").trim(),
+      fecha_inicio: toIso(formData, "inicio"),
+      fecha_fin: toIso(formData, "fin"),
+    });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error("crearInvitacionAction failed:", error);
+    const message = error instanceof Error ? error.message : "Error desconocido.";
+    return { error: `No se pudo crear la invitación: ${message}` };
+  }
   revalidatePath("/");
+  return {};
 }
 
 export async function cancelarInvitacionAction(formData: FormData): Promise<void> {
@@ -39,16 +62,5 @@ export async function cancelarInvitacionAction(formData: FormData): Promise<void
   }
 
   await cancelInvitation(ctx, id);
-  revalidatePath("/");
-}
-
-/**
- * Manually drive the lifecycle clock. In production this is a Vercel Cron hitting
- * /api/tick every minute (P0-M5) — a SYSTEM operation, not resident-scoped; for
- * the M0 fakes demo it's a button so you can watch CREATED -> ACTIVE -> REMOVED.
- */
-export async function procesarCicloAction(): Promise<void> {
-  const { ctx } = await getCurrentResident();
-  await tick(ctx, new Date());
   revalidatePath("/");
 }
