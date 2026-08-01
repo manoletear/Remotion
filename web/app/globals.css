@@ -173,6 +173,26 @@ button.busy::after {
 }
 .empty-state p { margin: 0 0 var(--sp-3); }
 
+/* Household profile: pet gallery (specs/003-household-permanent-access). */
+.pet-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+.pet-card { text-align: center; }
+.pet-photo {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--field-bg);
+}
+.pet-photo-empty { display: block; }
+.pet-photo-form { display: flex; gap: var(--sp-2); align-items: center; margin: var(--sp-2) 0; }
+.pet-photo-form input[type="file"] { padding: var(--sp-1); font-size: var(--text-xs); }
+
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: var(--sp-3) var(--sp-2); border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
 th { color: var(--muted); font-weight: 600; }

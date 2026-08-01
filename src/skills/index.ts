@@ -11,3 +11,8 @@ export * from "./rtu_remove_user.js";
 export * from "./provisioning.js";
 export * from "./rtu/protocol.js";
 export type { RtuResult } from "./rtu/types.js";
+export * from "./household/add_family_member.js";
+export * from "./household/add_employee.js";
+export * from "./household/remove_household_member.js";
+export * from "./pets/add_pet.js";
+export * from "./pets/remove_pet.js";

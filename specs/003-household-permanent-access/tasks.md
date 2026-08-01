@@ -31,16 +31,24 @@ Paths are relative to `Remotion/` (package root) for `src/`/`supabase/`, and to
 
 ## Phase 1: Setup
 
-- [ ] T001 Write migration `supabase/migrations/0006_household_permanent_access.sql`:
-      `resident_tipo`/`resident_status` enums, new `residentes` columns (`tipo`, `rut`,
-      `patente`, `estado`, `dispositivo_id`, `rtu_slot`, `sent_at`, `sync_attempts`,
-      `last_error`), `residentes_device_slot_unique` index, `mascotas` table + its RLS
-      policies, `jobs.invitation_id` → `entity_id` rename with FK dropped (data-model.md)
-- [ ] T002 [P] Create the `mascotas-fotos` Supabase Storage bucket and its
-      `{propiedad_id}/...`-scoped RLS policies (data-model.md "Storage" section)
-- [ ] T003 [P] Implement `rut()` in `src/shared/validators.ts` (módulo 11 check digit,
-      normalizes to `XXXXXXXX-X`) with unit tests covering valid/invalid/K-digit cases
-      (research.md, FR-007)
+- [X] T001 Migration `supabase/migrations/0006_household_permanent_access.sql` written
+      (not yet applied to the real Supabase project — see Next Actions in
+      `Projects/CondoGATE/CLAUDE.md`). **Landed together with T002** (same file, one
+      cohesive schema change). **Corrected mid-writing**: the original plan cited
+      `eventos.entidad_id` as "a bare uuid, no type column" precedent for
+      `jobs.entity_id` — wrong, `eventos` actually pairs `entidad` (type) + `entidad_id`.
+      Added `jobs.entity_type` (enum `INVITATION | RESIDENT`) to actually match that
+      precedent; without it `tick()` couldn't route a due `RETRY` job to the right
+      engine. Also added `residentes.removal_requested` (mirrors
+      `invitaciones.cancelled`) — needed so a retried ERROR resident knows whether to
+      re-drive toward `ACTIVE` or `REMOVED`, the same ambiguity invitations resolve
+      with `cancelled`.
+- [X] T002 [P] `mascotas-fotos` bucket + RLS storage policies included in migration
+      0006 (see T001 note).
+- [X] T003 [P] `normalizeRut()` in `src/shared/validators.ts`, wired into `Validator`
+      as `.rut()`. 4 unit tests in `src/shared/validators.test.ts` — computed the K-digit
+      test case programmatically rather than trusting a recalled "well-known" example
+      (one such recalled example turned out wrong when checked).
 
 **Checkpoint**: Schema and the one pure-function validator exist independently of
 everything else.
@@ -52,26 +60,32 @@ everything else.
 **⚠️ CRITICAL**: No user story below can dispatch a real RTU command until this phase's
 sync engine exists.
 
-- [ ] T004 Extend `src/domain/resident/index.ts`: `Resident` gains `tipo`, `rut`,
-      `patente`, `estado`, `dispositivo_id`, `rtu_slot`, `sent_at`, `sync_attempts`,
-      `last_error`; add `ResidentStatus` transitions (`assertTransition`/`canTransition`
-      equivalent to `domain/invitation/index.ts`'s, per data-model.md's state diagram)
-      (depends on T001 for the enum shape to mirror)
-- [ ] T005 Extend `src/mcp/supabase/port.ts`: `ResidentPatch` covers the new sync
-      fields; `ResidentRepository` gains `occupiedSlots(deviceId)`; new
-      `PetRepository` (create/get/listByProperty/delete) and its entry in `DataStore`
-- [ ] T006 [P] Implement T005's port additions in `src/mcp/supabase/in_memory.ts`
-      (needed first — tests run against this)
-- [ ] T007 [P] Implement T005's port additions in `src/mcp/supabase/supabase_store.ts`
-      (depends on T001's real schema existing)
-- [ ] T008 New `src/orchestration/permanent_access_sync.ts`: `syncAddPermanent`,
-      `syncRemovePermanent`, `confirmOnePermanent`, `confirmInFlightPermanent` —
-      structurally mirrors `rtu_sync.ts` exactly (research.md's "parallel engine"
-      decision), targeting `residentes`/slots 1-99 instead of `invitaciones`/100-200
-      (depends on T004, T006)
-- [ ] T009 Edit `src/orchestration/invitation_lifecycle.ts`: `tick()` also calls
-      `confirmInFlightPermanent(ctx, now)` alongside the existing
-      `confirmInFlight(ctx, now)` (depends on T008)
+- [X] T004 `src/domain/resident/index.ts` extended with all the new fields plus
+      `removal_requested`; `assertResidentTransition`/`canTransitionResident` added
+      (5-state machine, no CREATED/EXPIRED — see data-model.md).
+- [X] T005 `src/mcp/supabase/port.ts`: `ResidentPatch` extended; `ResidentRepository`
+      gained `occupiedSlots`, `findByPhone` (needed for FR-008, not originally listed
+      here but required by contracts/household-skills.md), `listByStatus`; new
+      `PetRepository`/`Pet`/`NewPet` and `DataStore.pets`.
+- [X] T006 [P] `in_memory.ts` implements all of T005.
+- [X] T007 [P] `supabase_store.ts` implements all of T005 (real backend — untestable
+      against the live DB until migration 0006 is applied, per T001's note).
+- [X] T008 `src/orchestration/permanent_access_sync.ts` written — structurally mirrors
+      `rtu_sync.ts` throughout (transition/assignSlot/resolveDevice/timedOut/
+      syncAdd/syncRemove/confirmOne/confirmInFlight/closeOut/failSync), targeting
+      `RTU5024.RESIDENT_SLOT_START..INVITATION_SLOT_START-1` (1-99) and scheduling
+      `RETRY` jobs with `entityType: "RESIDENT"`.
+- [X] T009 `tick()` in `invitation_lifecycle.ts` now calls `confirmInFlightPermanent`
+      alongside `confirmInFlight`, and routes a due `RETRY` job to `retry()` or the new
+      `retryPermanent()` based on `job.entityType` (not in the original task wording —
+      needed once `entity_type` was added per T001's correction).
+      **This required a broader change than planned**: `ScheduledJob`/`SchedulerPort`
+      themselves were generalized (`invitationId` → `entityType` + `entityId`) across
+      `src/mcp/scheduler/{port,in_memory,supabase_scheduler}.ts` and every
+      `ctx.scheduler.schedule(...)` call site (`create_invitation.ts`,
+      `update_invitation.ts`, `rtu_sync.ts`) — the scheduler port was invitation-specific
+      before this feature and had to become polymorphic to support resident RETRY jobs
+      at all.
 
 **Checkpoint**: A real, tested permanent-access sync engine exists; every user story
 below is now "just" a skill + UI wrapper around it.
@@ -87,22 +101,26 @@ with no expiration (quickstart.md section 2).
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T010 [P] [US1] `src/permanent_access.test.ts` (new file, mirrors
-      `lifecycle.test.ts`'s structure): happy path add→confirm, failed add, ack
-      timeout, retry-recovers, slot reuse after removal — against
-      `permanent_access_sync.ts` directly (depends on T008)
+- [X] T010 [P] [US1] `src/permanent_access.test.ts`: happy path (confirms slot 1, not
+      the invitation range), failed add, ack timeout, slot reuse after removal,
+      concurrent distinct slots, permanent/invitation ranges never collide, no-op
+      removal of an unsynced resident. 7 tests, all passing.
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] `src/skills/household/add_family_member.ts` per
-      contracts/household-skills.md: validation, FR-008 duplicate-phone check, insert
-      `tipo='FAMILIAR'`, call `syncAddPermanent` (depends on T008)
-- [ ] T012 [US1] `web/app/perfil/actions.ts`: `agregarFamiliarAction` (busy/error
-      pattern from `002`'s `SubmitButton`/`useActionState` — reuse, don't reinvent)
-- [ ] T013 [US1] `web/app/perfil/page.tsx`: "Nueva familiar" form + family list with
-      status badges (reuse `002`'s `statusBadge`-style tone tokens, extended for
-      `ResidentStatus`)
-- [ ] T014 [US1] Validate quickstart.md section 2
+- [X] T011 [US1] `src/skills/household/add_family_member.ts` — matches contract;
+      `findByPhone` added to the port (T005) specifically to support FR-008 here.
+- [X] T012 [US1] `web/app/perfil/actions.ts`: `agregarFamiliarAction` (and, ahead of
+      schedule, `agregarEmpleadoAction`/`removerMiembroAction`/`agregarMascotaAction`/
+      `removerMascotaAction` too — one actions file for the whole page, matching
+      how `web/app/actions.ts` already covers all of the dashboard's actions).
+- [X] T013 [US1] `web/app/perfil/page.tsx` + `perfil-forms.tsx` (client components,
+      `useActionState`): family list with `statusBadge` tones (confirmed
+      `ResidentStatus`'s string values are identical to the `InvitationStatus` subset
+      `statusBadge` already switches on, so it needed zero changes to support residents).
+- [~] T014 [US1] **Build-verified only.** `npm run build` (web) registers `/perfil`
+      cleanly; a live pass needs migration 0006 applied to the real Supabase project
+      first (not done yet — see CLAUDE.md Next Actions) and then a human trying it.
 
 **Checkpoint**: User Story 1 fully functional and independently testable.
 
@@ -116,14 +134,14 @@ with no expiration (quickstart.md section 2).
 the same access flow, and that the RUT never leaks into audit/notifications
 (quickstart.md section 3).
 
-- [ ] T015 [US2] `src/skills/household/add_employee.ts` per
-      contracts/household-skills.md: same as `add_family_member` plus `rut()`
-      validation (T003) before saving anything; `patente` optional free text (depends
-      on T003, T008)
-- [ ] T016 [US2] Extend `web/app/perfil/actions.ts`/`page.tsx`: "Nuevo empleado" form
-      (RUT + plate fields) and employee list (depends on T011-T013's patterns)
-- [ ] T017 [US2] Validate quickstart.md section 3, including grepping/inspecting
-      audit-event payloads to confirm RUT is absent (FR-010, SC-005)
+- [X] T015 [US2] `src/skills/household/add_employee.ts` — matches contract.
+- [X] T016 [US2] `AddEmpleadoForm` in `perfil-forms.tsx` + employee table in
+      `page.tsx` (RUT, patente columns).
+- [~] T017 [US2] **Partially verified.** Confirmed by code inspection (not a live
+      grep against a real DB yet): `permanent_access_sync.ts`'s `auditEvent` payloads
+      only ever include `operation`/`slot`/`deviceId`/`error`/`attempts`/`willRetry` —
+      `resident.rut` is never referenced anywhere in that file. Live confirmation
+      (SC-005) still needs migration 0006 applied + a real employee added.
 
 **Checkpoint**: US1 + US2 together — the core permanent-access capability is complete.
 
@@ -136,14 +154,20 @@ the same access flow, and that the RUT never leaks into audit/notifications
 **Independent Test**: Add a pet (valid and oversized/bad-format photo cases); confirm
 no SMS gateway call is ever made for it (quickstart.md section 4).
 
-- [ ] T018 [P] [US3] `src/skills/pets/add_pet.ts` and `remove_pet.ts` per
-      contracts/pet-skills.md (depends on T005-T007 for `PetRepository`)
-- [ ] T019 [US3] `web/app/api/pets/photo/route.ts`: multipart upload, FR-011
-      size/format validation with specific error messages, writes to
-      `mascotas-fotos` via service-role client (depends on T002)
-- [ ] T020 [US3] Extend `web/app/perfil/page.tsx`: "Nueva mascota" form (name + photo)
-      and a pet gallery (depends on T018, T019)
-- [ ] T021 [US3] Validate quickstart.md section 4
+- [X] T018 [P] [US3] `src/skills/pets/add_pet.ts`/`remove_pet.ts` — `removePet`
+      returns the deleted row (not just void) so the caller can clean up its
+      `foto_path` in storage, per contracts/pet-skills.md.
+- [X] T019 [US3] `web/app/api/pets/photo/route.ts`: 5MB limit, JPG/PNG/WEBP allow-list,
+      specific rejection messages, uploads via service-role client to
+      `{propiedad_id}/{pet_id}.{ext}`.
+- [X] T020 [US3] `AddMascotaForm` + `PetPhotoUpload` (client, `fetch`-based — a plain
+      server action can't easily give per-upload progress/error feedback for a
+      multipart file the way `useActionState` does for text fields) + pet gallery in
+      `page.tsx`, with signed URLs (5 min TTL) generated server-side since the bucket
+      is private.
+- [~] T021 [US3] **Build-verified only** — same migration/live-testing caveat as T014.
+      Confirmed by code inspection that `add_pet.ts`/`remove_pet.ts` never reference
+      `ctx.sms` or `ctx.scheduler` at all.
 
 **Checkpoint**: All three "add" stories independently functional.
 
@@ -157,15 +181,18 @@ no SMS gateway call is ever made for it (quickstart.md section 4).
 revokes them and a newly-added member can reuse the freed slot (quickstart.md
 sections 5-6).
 
-- [ ] T022 [US4] `src/skills/household/remove_household_member.ts` per
-      contracts/household-skills.md: mirrors `cancelInvitation`'s close-out-or-dispatch
-      shape; rejects removing a `tipo='RESIDENT'` row (depends on T008)
-- [ ] T023 [US4] Extend `web/app/perfil/actions.ts`/`page.tsx`: remove buttons on
-      family/employee rows, reusing `002`'s `SubmitButton`/`.btn-circle danger` pattern
-      (depends on T012, T022)
-- [ ] T024 [US4] Validate quickstart.md section 5 (revoke + slot reuse)
-- [ ] T025 [US4] Validate quickstart.md section 6 (slot exhaustion → clear message,
-      FR-009/SC-006)
+- [X] T022 [US4] `src/skills/household/remove_household_member.ts` — matches contract;
+      idempotent on REMOVED/REMOVING; rejects `tipo === 'RESIDENT'`.
+- [X] T023 [US4] `removerMiembroAction` + `.btn-circle small danger` "Quitar" buttons
+      on both the family and employee tables in `page.tsx`.
+- [~] T024 [US4] **Unit-tested, not live-tested.** `permanent_access.test.ts`'s
+      "removal reaches REMOVED and frees the slot for reuse" test covers this exact
+      scenario against the fake gateway. Live pass needs migration 0006 applied.
+- [ ] T025 [US4] **Not yet validated even in tests** — filling all 99 slots to check
+      the exhaustion message is expensive to set up and wasn't done this pass. The
+      code path exists (`assignSlot` throws `RtuSyncError("No free permanent RTU slot
+      available")`, surfaced by `agregarFamiliarAction`'s catch block as
+      "No se pudo agregar: ..."), but is unverified. Flagged, not silently skipped.
 
 **Checkpoint**: All four user stories independently verifiable; a resident can fully
 manage their household's permanent access end to end.
@@ -174,12 +201,28 @@ manage their household's permanent access end to end.
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T026 [P] `npm test` — full domain suite (existing 16 + this feature's new cases)
-      green
-- [ ] T027 [P] `npm run build` (web) — clean, `/perfil` and `/api/pets/photo`
-      registered correctly, no regressions to `001`/`002`'s routes
-- [ ] T028 Re-run all of quickstart.md end-to-end before calling the feature done
-      (SC-001 through SC-006 all satisfied)
+- [X] T026 [P] `npm test` — 34/34 passing (16 pre-existing + 4 RUT + 7 sync-engine +
+      7 household/pet-skill tests).
+- [X] T027 [P] `npm run build` (web) — clean; `/perfil` and `/api/pets/photo`
+      registered; `001`/`002`'s routes unaffected.
+- [ ] T028 **Not done.** Requires migration 0006 applied to the real Supabase project
+      (and the `mascotas-fotos` bucket existing there) first — tracked in
+      `Projects/CondoGATE/CLAUDE.md` Next Actions. T025's slot-exhaustion check is
+      also still outstanding regardless of live DB access (see T025).
+
+### Discovered during implementation (not in the original task list)
+
+- **Scheduler port had to become polymorphic** (T009's note) — a materially bigger
+  change than "add one field," since every existing call site needed updating too.
+  Verified nothing broke: all pre-existing invitation tests still pass unchanged.
+- **`eventos`/`jobs` precedent correction** (T001's note) — caught and fixed before
+  writing code against the wrong assumption, not after.
+- **`residentes` RLS gap** — like `eventos` in `001`, `residentes` had no INSERT policy
+  and an UPDATE policy scoped to `id = current_residente_id()` only (a resident could
+  update only their own row). Neither would have supported this feature at all. Fixed
+  in migration 0006 (`residentes_insert_own`/`residentes_update_own`/
+  `residentes_delete_own`, all scoped to `propiedad_id = current_propiedad_id()`,
+  replacing the too-narrow update policy).
 
 ---
 

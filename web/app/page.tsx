@@ -24,6 +24,7 @@ export default async function Dashboard() {
           <h1>Mis invitaciones</h1>
           <p className="muted">{resident.nombre} · Casa 1 · Condominio Demo</p>
         </div>
+        <Link href="/perfil">Perfil del hogar →</Link>
       </div>
 
       <section className="panel">
