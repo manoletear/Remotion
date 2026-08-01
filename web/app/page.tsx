@@ -2,8 +2,8 @@ import Link from "next/link";
 
 import { fmtDateTime, statusBadge } from "@/lib/format";
 import { getCurrentResident } from "@/lib/session";
+import { SettingsGear } from "./components/settings-gear";
 import { SubmitButton } from "./components/submit-button";
-import { NewInvitationForm } from "./new-invitation-form";
 import { cancelarInvitacionAction } from "./actions";
 
 // Always render fresh: the in-memory store mutates on every action.
@@ -21,23 +21,18 @@ export default async function Dashboard() {
     <main>
       <div className="toolbar">
         <div>
-          <h1>Mis invitaciones</h1>
+          <h1>Invitaciones enviadas</h1>
           <p className="muted">{resident.nombre} · Casa 1 · Condominio Demo</p>
         </div>
-        <Link href="/perfil">Perfil del hogar →</Link>
+        <SettingsGear />
       </div>
-
-      <section className="panel">
-        <h2>Nueva invitación</h2>
-        <NewInvitationForm />
-      </section>
 
       <section className="panel">
         <h2>Invitaciones ({invitations.length})</h2>
         {invitations.length === 0 ? (
           <div className="empty-state">
             <p>Aún no has creado invitaciones.</p>
-            <p className="muted">Usa el formulario de arriba para crear la primera.</p>
+            <p className="muted"><Link href="/invitar">Invitar</Link> para crear la primera.</p>
           </div>
         ) : (
           <table>

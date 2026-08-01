@@ -31,7 +31,7 @@ app — per `plan.md`'s Project Structure.
 
 ## Phase 1: Setup
 
-- [ ] T001 Write migration `supabase/migrations/0007_admin_dashboard.sql` exactly per
+- [X] T001 Write migration `supabase/migrations/0007_admin_dashboard.sql` exactly per
       contracts/admin-rls.md: `perfiles.condominio_id`, `is_admin_for_condominio()`,
       and the 6 admin SELECT policies (`condominios`, `propiedades`, `dispositivos`,
       `residentes`, `invitaciones`, `mascotas`, `eventos` — 7 tables, per the
@@ -45,11 +45,11 @@ app — per `plan.md`'s Project Structure.
 
 **⚠️ CRITICAL**: No admin page can render without the auth seam and shell existing.
 
-- [ ] T002 `web/lib/admin-session.ts`: `getCurrentAdmin()` — mirrors
+- [X] T002 `web/lib/admin-session.ts`: `getCurrentAdmin()` — mirrors
       `getCurrentResident()`'s shape (session client, redirect to `/login` if
       unauthenticated), but checks `perfiles.rol === 'ADMIN'` and returns
       `{ ctx, condominioId }` instead of a resident/property (depends on T001)
-- [ ] T003 `web/app/admin/layout.tsx` + new CSS in `web/app/globals.css`: sidebar nav
+- [X] T003 `web/app/admin/layout.tsx` + new CSS in `web/app/globals.css`: sidebar nav
       shell (Resumen/Bitácora/Propiedades/Invitaciones links), calls
       `getCurrentAdmin()` as the route group's auth guard — desktop-first SaaS layout
       per research.md, new `.admin-shell`/`.admin-sidebar`/`.stat-card`/`.admin-table`
@@ -67,7 +67,7 @@ every page below is "just" a data query + table inside it.
 **Independent Test**: Load `/admin/bitacora` and find an event belonging to a property
 that isn't the admin's own (quickstart.md section 1, step 3).
 
-- [ ] T004 [US1] `web/app/admin/bitacora/page.tsx`: query `eventos` (now readable
+- [X] T004 [US1] `web/app/admin/bitacora/page.tsx`: query `eventos` (now readable
       condo-wide per T001's RLS) joined/labeled with the property each event traces
       back to; render as a table (depends on T003)
 - [ ] T005 [US1] Validate quickstart.md section 1, step 3
@@ -83,7 +83,7 @@ that isn't the admin's own (quickstart.md section 1, step 3).
 **Independent Test**: Find a family member or employee on a property that isn't the
 admin's own, including their RUT if they're an employee (quickstart.md section 1, step 4).
 
-- [ ] T006 [US2] `web/app/admin/propiedades/page.tsx`: list every property, and under
+- [X] T006 [US2] `web/app/admin/propiedades/page.tsx`: list every property, and under
       each, its residents/family members/employees with `statusBadge`-style status —
       RUT shown here (admin-only visibility is intentional per spec User Story 2,
       scenario 2) (depends on T003)
@@ -100,7 +100,7 @@ admin's own, including their RUT if they're an employee (quickstart.md section 1
 **Independent Test**: Find an invitation on a property that isn't the admin's own
 (quickstart.md section 1, step 5).
 
-- [ ] T008 [US3] `web/app/admin/invitaciones/page.tsx`: condo-wide invitations table,
+- [X] T008 [US3] `web/app/admin/invitaciones/page.tsx`: condo-wide invitations table,
       property-labeled, reusing `statusBadge` (depends on T003)
 - [ ] T009 [US3] Validate quickstart.md section 1, step 5
 
@@ -110,10 +110,10 @@ admin's own, including their RUT if they're an employee (quickstart.md section 1
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T010 [P] `web/app/admin/page.tsx`: overview stat cards (property count, active
+- [X] T010 [P] `web/app/admin/page.tsx`: overview stat cards (property count, active
       family+employee count, active invitation count) — the landing page tying
       US1-US3 together, built last since it summarizes what they each already query
-- [ ] T011 [P] `npm run build` (web) — clean, `/admin/*` routes registered, no
+- [X] T011 [P] `npm run build` (web) — clean, `/admin/*` routes registered, no
       regressions to existing routes
 - [ ] T012 Validate quickstart.md section 2 (resident isolation unchanged, FR-005) and
       section 3 (RLS is the real boundary, not just hidden UI, FR-006) — the two

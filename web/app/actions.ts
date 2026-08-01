@@ -2,6 +2,7 @@
 
 import { cancelInvitation, createInvitation } from "gsm-gate-access-layer";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { getCurrentResident } from "@/lib/session";
 
@@ -46,7 +47,7 @@ export async function crearInvitacionAction(
     return { error: `No se pudo crear la invitación: ${message}` };
   }
   revalidatePath("/");
-  return {};
+  redirect("/");
 }
 
 export async function cancelarInvitacionAction(formData: FormData): Promise<void> {
