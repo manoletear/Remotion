@@ -45,8 +45,12 @@ export async function getCurrentAdmin(): Promise<CurrentAdmin> {
     .eq("id", user.id)
     .single();
 
+  // Redirect to "/", not "/login" — the middleware bounces an already
+  // authenticated session straight back out of "/login" to "/", which would
+  // silently swallow this redirect and make /admin look like it "does
+  // nothing" instead of clearly denying access to a non-admin account.
   if (perfilError || perfil?.rol !== "ADMIN" || !perfil.condominio_id) {
-    redirect("/login");
+    redirect("/");
   }
 
   return {
