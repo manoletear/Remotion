@@ -24,6 +24,32 @@ export enum InvitationStatus {
   ERROR = "ERROR",
 }
 
+/** Kind of permanent access-holder a resident row represents. */
+export enum ResidentTipo {
+  /** The admin-seeded, login-owning resident. */
+  RESIDENT = "RESIDENT",
+  FAMILIAR = "FAMILIAR",
+  EMPLEADO = "EMPLEADO",
+}
+
+/**
+ * Lifecycle states of a permanent access-holder (permiso permanente) — a
+ * FAMILIAR or EMPLEADO resident row. No CREATED (dispatch is immediate on
+ * add, not scheduled) and no EXPIRED (this access has no time window).
+ */
+export enum ResidentStatus {
+  /** Waiting to be synchronized with the RTU. */
+  PENDING_SYNC = "PENDING_SYNC",
+  /** Access successfully loaded on the device. */
+  ACTIVE = "ACTIVE",
+  /** Removal from the device is in progress. */
+  REMOVING = "REMOVING",
+  /** Removal confirmed by the device. */
+  REMOVED = "REMOVED",
+  /** A synchronization operation failed. */
+  ERROR = "ERROR",
+}
+
 /** Operational status of a Condominium. */
 export enum CondominiumStatus {
   ACTIVE = "ACTIVE",

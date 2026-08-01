@@ -16,10 +16,18 @@ import {
   CondominiumStatus,
   DeviceStatus,
   InvitationStatus,
+  ResidentStatus,
+  ResidentTipo,
 } from "../../shared/enums.js";
 import { RTU5024 } from "../../shared/constants.js";
 import { newId, nowIso } from "../../shared/utils.js";
-import type { DataStore, InvitationPatch, ResidentPatch } from "./port.js";
+import type {
+  DataStore,
+  InvitationPatch,
+  NewPet,
+  Pet,
+  ResidentPatch,
+} from "./port.js";
 
 /**
  * In-memory implementation of the persistence port. Used by tests and the
@@ -33,6 +41,7 @@ export class InMemoryDataStore implements DataStore {
   private readonly _devices = new Map<string, Device>();
   private readonly _invitations = new Map<string, Invitation>();
   private readonly _events: Event[] = [];
+  private readonly _pets = new Map<string, Pet>();
 
   /** Resolve the device serving a property (property -> condominium -> device). */
   private deviceForProperty(propiedadId: string): Device | null {
@@ -84,6 +93,19 @@ export class InMemoryDataStore implements DataStore {
         telefono: input.telefono,
         apellido: input.apellido ?? null,
         avatar_url: input.avatar_url ?? null,
+        tipo: input.tipo ?? ResidentTipo.RESIDENT,
+        rut: input.rut ?? null,
+        patente: input.patente ?? null,
+        estado:
+          (input.tipo ?? ResidentTipo.RESIDENT) === ResidentTipo.RESIDENT
+            ? ResidentStatus.ACTIVE
+            : ResidentStatus.PENDING_SYNC,
+        dispositivo_id: null,
+        rtu_slot: null,
+        sent_at: null,
+        sync_attempts: 0,
+        last_error: null,
+        removal_requested: false,
         created_at: nowIso(),
       };
       this._residents.set(row.id, row);
@@ -98,6 +120,21 @@ export class InMemoryDataStore implements DataStore {
       const next: Resident = { ...current, ...patch };
       this._residents.set(id, next);
       return next;
+    },
+    findByPhone: async (phone: string) => {
+      for (const r of this._residents.values()) {
+        if (r.telefono === phone) return r;
+      }
+      return null;
+    },
+    listByStatus: async (status: ResidentStatus) =>
+      [...this._residents.values()].filter((r) => r.estado === status),
+    occupiedSlots: async (deviceId: string) => {
+      const slots: number[] = [];
+      for (const r of this._residents.values()) {
+        if (r.rtu_slot !== null && r.dispositivo_id === deviceId) slots.push(r.rtu_slot);
+      }
+      return slots;
     },
   };
 
@@ -192,5 +229,32 @@ export class InMemoryDataStore implements DataStore {
         .filter((e) => e.entidad_id === entidadId)
         .sort((a, b) => b.fecha.localeCompare(a.fecha))
         .slice(0, limit),
+  };
+
+  pets = {
+    create: async (input: NewPet): Promise<Pet> => {
+      const row: Pet = {
+        id: newId(),
+        propiedad_id: input.propiedad_id,
+        nombre: input.nombre,
+        foto_path: null,
+        created_at: nowIso(),
+      };
+      this._pets.set(row.id, row);
+      return row;
+    },
+    get: async (id: string) => this._pets.get(id) ?? null,
+    listByProperty: async (propiedadId: string) =>
+      [...this._pets.values()].filter((p) => p.propiedad_id === propiedadId),
+    update: async (id: string, patch: Partial<Pick<Pet, "foto_path">>): Promise<Pet> => {
+      const current = this._pets.get(id);
+      if (!current) throw new Error(`Pet not found: ${id}`);
+      const next: Pet = { ...current, ...patch };
+      this._pets.set(id, next);
+      return next;
+    },
+    delete: async (id: string) => {
+      this._pets.delete(id);
+    },
   };
 }

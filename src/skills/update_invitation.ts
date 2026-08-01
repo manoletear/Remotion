@@ -92,8 +92,8 @@ export async function updateInvitation(
   });
 
   if (windowChanged) {
-    await ctx.scheduler.schedule("ACTIVATION", updated.id, new Date(updated.fecha_inicio));
-    await ctx.scheduler.schedule("EXPIRATION", updated.id, new Date(updated.fecha_fin));
+    await ctx.scheduler.schedule("ACTIVATION", "INVITATION", updated.id, new Date(updated.fecha_inicio));
+    await ctx.scheduler.schedule("EXPIRATION", "INVITATION", updated.id, new Date(updated.fecha_fin));
   }
 
   return updated;

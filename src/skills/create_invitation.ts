@@ -65,8 +65,8 @@ export async function createInvitation(
     payload: { propiedad_id: invitation.propiedad_id },
   });
 
-  await ctx.scheduler.schedule("ACTIVATION", invitation.id, start);
-  await ctx.scheduler.schedule("EXPIRATION", invitation.id, end);
+  await ctx.scheduler.schedule("ACTIVATION", "INVITATION", invitation.id, start);
+  await ctx.scheduler.schedule("EXPIRATION", "INVITATION", invitation.id, end);
 
   return invitation;
 }

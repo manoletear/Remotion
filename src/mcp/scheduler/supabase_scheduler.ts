@@ -1,14 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { newId } from "../../shared/utils.js";
-import type { ScheduledJob, ScheduledKind, SchedulerPort } from "./port.js";
+import type {
+  ScheduledEntityType,
+  ScheduledJob,
+  ScheduledKind,
+  SchedulerPort,
+} from "./port.js";
 
 const TABLE = "jobs";
 
 interface JobRow {
   id: string;
   kind: ScheduledKind;
-  invitation_id: string;
+  entity_type: ScheduledEntityType;
+  entity_id: string;
   run_at: string;
 }
 
@@ -17,28 +23,31 @@ interface JobRow {
  * restarts (unlike InMemoryScheduler), so scheduled activations/expirations are
  * not lost. A cron job or worker polls `due()` and calls `complete()`.
  *
- * Schema: supabase/migrations/0002_scheduler_jobs.sql
+ * Schema: supabase/migrations/0002_scheduler_jobs.sql,
+ * 0006_household_permanent_access.sql (entity_type/entity_id).
  */
 export class SupabaseScheduler implements SchedulerPort {
   constructor(private readonly db: SupabaseClient) {}
 
   async schedule(
     kind: ScheduledKind,
-    invitationId: string,
+    entityType: ScheduledEntityType,
+    entityId: string,
     runAt: Date,
   ): Promise<ScheduledJob> {
-    // Replace any pending job of the same kind for this invitation.
+    // Replace any pending job of the same kind for this entity.
     await this.db
       .from(TABLE)
       .delete()
-      .eq("invitation_id", invitationId)
+      .eq("entity_id", entityId)
       .eq("kind", kind)
       .eq("status", "PENDING");
 
     const row = {
       id: newId(),
       kind,
-      invitation_id: invitationId,
+      entity_type: entityType,
+      entity_id: entityId,
       run_at: runAt.toISOString(),
       status: "PENDING",
     };
@@ -47,11 +56,11 @@ export class SupabaseScheduler implements SchedulerPort {
     return toJob(res.data as JobRow);
   }
 
-  async cancel(invitationId: string, kind?: ScheduledKind): Promise<void> {
+  async cancel(entityId: string, kind?: ScheduledKind): Promise<void> {
     let q = this.db
       .from(TABLE)
       .delete()
-      .eq("invitation_id", invitationId)
+      .eq("entity_id", entityId)
       .eq("status", "PENDING");
     if (kind) q = q.eq("kind", kind);
     const res = await q;
@@ -79,7 +88,8 @@ function toJob(row: JobRow): ScheduledJob {
   return {
     id: row.id,
     kind: row.kind,
-    invitationId: row.invitation_id,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
     runAt: row.run_at,
   };
 }

@@ -30,15 +30,20 @@ parameterizing the entity type — rejected for the reason above. Have permanent
 call the *existing* invitation engine with a fake "invitation" shaped like a resident —
 rejected as more confusing than two parallel, individually-readable modules.
 
-## Decision: `jobs.invitation_id` becomes a polymorphic `entity_id`
+## Decision: `jobs.invitation_id` becomes a polymorphic `entity_type` + `entity_id`
 
 **Decision**: Migration `0006` renames `jobs.invitation_id` to `entity_id` (still
-`uuid not null`) and **drops** its foreign key to `invitaciones` — mirroring
-`eventos.entidad_id`, which already has exactly this shape (a bare uuid, no FK,
-because it needs to reference more than one entity type). Existing `ACTIVATION`/
-`EXPIRATION`/`RETRY` job rows keep working unchanged (same column, same values, just
-renamed and un-constrained); new resident-targeted `RETRY` jobs use the same column
-against a `residente_id`.
+`uuid not null`, FK to `invitaciones` dropped) and adds `entity_type` (enum
+`INVITATION | RESIDENT`) — mirroring `eventos`'s actual shape, which pairs `entidad`
+(type) with `entidad_id`, not a bare uuid alone. (An earlier draft of this decision
+cited "a bare uuid, no FK" as the eventos precedent and missed that eventos already
+carries a type column too — corrected here before writing any code against it.)
+Existing `ACTIVATION`/`EXPIRATION` rows are invitation-only by construction and
+backfill `entity_type = 'INVITATION'` via the column default; new resident-targeted
+`RETRY` jobs set `entity_type = 'RESIDENT'`. `tick()` needs this to route a due
+`RETRY` job to the invitation retry path or the new permanent-access retry path —
+without a type column, a `RETRY` job's `entity_id` alone is ambiguous between the two
+tables.
 
 **Rationale**: Without this, a failed permanent-access sync has no way to schedule an
 automatic re-drive the way `failSync` already does for invitations (`rtu_sync.ts`'s

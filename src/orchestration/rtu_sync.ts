@@ -329,6 +329,7 @@ async function failSync(
       RTU_SYNC_RETRY.RETRY_JOB_BASE_DELAY_MS * 2 ** (updated.sync_attempts - 1);
     await ctx.scheduler.schedule(
       "RETRY",
+      "INVITATION",
       updated.id,
       new Date(ctx.now().getTime() + delay),
     );

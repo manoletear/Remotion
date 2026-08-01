@@ -18,6 +18,33 @@ export function assertRtuPassword(password: string): void {
   }
 }
 
+/**
+ * Validate and normalize a Chilean RUT, including its check digit (módulo 11).
+ * Accepts dots/dash/space formatting and a lowercase or uppercase "k" check
+ * digit; returns the canonical `XXXXXXXX-X` form, or `null` if the format or
+ * the check digit itself is invalid. RUT is sensitive PII (FR-010 in
+ * specs/003-household-permanent-access) — this function only validates and
+ * normalizes it; callers are responsible for keeping it out of audit
+ * payloads and notifications.
+ */
+export function normalizeRut(value: string): string | null {
+  const cleaned = value.replace(/[.\s]/g, "").toUpperCase();
+  const match = /^(\d{7,8})-?([0-9K])$/.exec(cleaned);
+  if (!match) return null;
+  const [, body, dv] = match as unknown as [string, string, string];
+
+  let sum = 0;
+  let multiplier = 2;
+  for (let i = body.length - 1; i >= 0; i--) {
+    sum += Number(body[i]) * multiplier;
+    multiplier = multiplier === 7 ? 2 : multiplier + 1;
+  }
+  const remainder = 11 - (sum % 11);
+  const expected = remainder === 11 ? "0" : remainder === 10 ? "K" : String(remainder);
+
+  return expected === dv ? `${body}-${dv}` : null;
+}
+
 /** Accumulates validation issues and throws a single {@link ValidationError}. */
 export class Validator {
   private readonly issues: string[] = [];
@@ -36,6 +63,16 @@ export class Validator {
     const normalized = normalizePhone(value);
     if (!normalized) {
       this.issues.push(`${field} is not a valid phone number: "${value}"`);
+      return null;
+    }
+    return normalized;
+  }
+
+  /** Validate and return a normalized RUT, or record an issue. */
+  rut(value: string, field: string): string | null {
+    const normalized = normalizeRut(value);
+    if (!normalized) {
+      this.issues.push(`${field} is not a valid RUT: "${value}"`);
       return null;
     }
     return normalized;

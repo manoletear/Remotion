@@ -1,5 +1,10 @@
 import { newId } from "../../shared/utils.js";
-import type { ScheduledJob, ScheduledKind, SchedulerPort } from "./port.js";
+import type {
+  ScheduledEntityType,
+  ScheduledJob,
+  ScheduledKind,
+  SchedulerPort,
+} from "./port.js";
 
 /**
  * In-memory scheduler. Jobs are held in a list and surfaced via `due()`, which
@@ -9,24 +14,30 @@ import type { ScheduledJob, ScheduledKind, SchedulerPort } from "./port.js";
 export class InMemoryScheduler implements SchedulerPort {
   private readonly jobs = new Map<string, ScheduledJob>();
 
-  async schedule(kind: ScheduledKind, invitationId: string, runAt: Date): Promise<ScheduledJob> {
-    // Replace any existing job of the same kind for this invitation.
+  async schedule(
+    kind: ScheduledKind,
+    entityType: ScheduledEntityType,
+    entityId: string,
+    runAt: Date,
+  ): Promise<ScheduledJob> {
+    // Replace any existing job of the same kind for this entity.
     for (const [id, job] of this.jobs) {
-      if (job.invitationId === invitationId && job.kind === kind) this.jobs.delete(id);
+      if (job.entityId === entityId && job.kind === kind) this.jobs.delete(id);
     }
     const job: ScheduledJob = {
       id: newId(),
       kind,
-      invitationId,
+      entityType,
+      entityId,
       runAt: runAt.toISOString(),
     };
     this.jobs.set(job.id, job);
     return job;
   }
 
-  async cancel(invitationId: string, kind?: ScheduledKind): Promise<void> {
+  async cancel(entityId: string, kind?: ScheduledKind): Promise<void> {
     for (const [id, job] of this.jobs) {
-      if (job.invitationId === invitationId && (!kind || job.kind === kind)) {
+      if (job.entityId === entityId && (!kind || job.kind === kind)) {
         this.jobs.delete(id);
       }
     }

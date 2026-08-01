@@ -18,9 +18,16 @@ import {
   CondominiumStatus,
   DeviceStatus,
   type InvitationStatus,
+  type ResidentStatus,
 } from "../../shared/enums.js";
 import { RTU5024 } from "../../shared/constants.js";
-import type { DataStore, InvitationPatch, ResidentPatch } from "./port.js";
+import type {
+  DataStore,
+  InvitationPatch,
+  NewPet,
+  Pet,
+  ResidentPatch,
+} from "./port.js";
 
 /** Physical table names. Kept in one place and mirrored by the SQL migration. */
 const TABLES = {
@@ -30,6 +37,7 @@ const TABLES = {
   devices: "dispositivos",
   invitations: "invitaciones",
   events: "eventos",
+  pets: "mascotas",
 } as const;
 
 /** Unwrap a Supabase single-row response, throwing on error. */
@@ -96,6 +104,20 @@ export class SupabaseDataStore implements DataStore {
       many(await this.db.from(TABLES.residents).select().eq("propiedad_id", propiedadId)),
     update: async (id: string, patch: ResidentPatch): Promise<Resident> =>
       single(await this.db.from(TABLES.residents).update(patch).eq("id", id).select().single()),
+    findByPhone: async (phone: string): Promise<Resident | null> =>
+      maybeOne(await this.db.from(TABLES.residents).select().eq("telefono", phone).maybeSingle()),
+    listByStatus: async (status: ResidentStatus): Promise<Resident[]> =>
+      many(await this.db.from(TABLES.residents).select().eq("estado", status)),
+    occupiedSlots: async (deviceId: string): Promise<number[]> => {
+      const rows = many<{ rtu_slot: number | null }>(
+        await this.db
+          .from(TABLES.residents)
+          .select("rtu_slot")
+          .eq("dispositivo_id", deviceId)
+          .not("rtu_slot", "is", null),
+      );
+      return rows.flatMap((r) => (r.rtu_slot === null ? [] : [r.rtu_slot]));
+    },
   };
 
   devices = {
@@ -183,6 +205,21 @@ export class SupabaseDataStore implements DataStore {
           .order("fecha", { ascending: false })
           .limit(limit),
       ),
+  };
+
+  pets = {
+    create: async (input: NewPet): Promise<Pet> =>
+      single(await this.db.from(TABLES.pets).insert(input).select().single()),
+    get: async (id: string): Promise<Pet | null> =>
+      maybeOne(await this.db.from(TABLES.pets).select().eq("id", id).maybeSingle()),
+    listByProperty: async (propiedadId: string): Promise<Pet[]> =>
+      many(await this.db.from(TABLES.pets).select().eq("propiedad_id", propiedadId)),
+    update: async (id: string, patch: Partial<Pick<Pet, "foto_path">>): Promise<Pet> =>
+      single(await this.db.from(TABLES.pets).update(patch).eq("id", id).select().single()),
+    delete: async (id: string): Promise<void> => {
+      const res = await this.db.from(TABLES.pets).delete().eq("id", id);
+      if (res.error) throw new Error(res.error.message);
+    },
   };
 }
 

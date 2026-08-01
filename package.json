@@ -20,7 +20,7 @@
   "files": ["dist"],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test --import tsx \"src/**/*.test.ts\"",
+    "test": "node scripts/run-tests.mjs",
     "build": "tsc -p tsconfig.build.json",
     "demo": "tsx ./src/demo.ts"
   },
