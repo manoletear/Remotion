@@ -14,14 +14,22 @@ export async function sendMagicLinkAction(
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   if (!email) return { error: "Ingresa tu correo electrónico." };
 
+  // Optional: where /auth/callback sends the browser after exchanging the
+  // code, e.g. "/reclamar/<token>" so an owner invitation claim resumes
+  // right where it left off (specs/005-owner-onboarding) instead of landing
+  // on "/" and losing the token.
+  const next = String(formData.get("next") ?? "").trim();
+
   // Cookie-aware client (not a bare anon client): signInWithOtp's PKCE code
   // verifier must be persisted in a cookie here so /auth/callback's
   // exchangeCodeForSession can read it back later.
   const supabase = await createSessionClient();
+  const callbackUrl = new URL(`${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback`);
+  if (next) callbackUrl.searchParams.set("next", next);
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback`,
+      emailRedirectTo: callbackUrl.toString(),
     },
   });
 

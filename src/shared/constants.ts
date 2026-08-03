@@ -51,3 +51,6 @@ export const PHONE_E164_REGEX = /^\+[1-9]\d{6,14}$/;
 
 /** Default country calling code used when normalizing local numbers. */
 export const DEFAULT_COUNTRY_CODE = "+56"; // Chile
+
+/** How long an owner invitation's claim link stays valid (research.md default). */
+export const OWNER_INVITATION_EXPIRY_MS = 7 * 24 * 60 * 60_000; // 7 days

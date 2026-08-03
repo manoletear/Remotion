@@ -1,11 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ConsoleNotifier,
+  ResendNotifier,
+  RoutingNotifier,
   SupabaseDataStore,
   SupabaseScheduler,
+  TwilioNotifier,
   TwilioSmsGateway,
   makeContext,
   pollInboundSms,
+  type NotificationPort,
   type SkillContext,
 } from "gsm-gate-access-layer";
 
@@ -32,6 +36,27 @@ function makeTwilioGateway(serviceClient: SupabaseClient): TwilioSmsGateway {
 }
 
 /**
+ * Real notifier: SMS/EMAIL for owner invitations (005), WhatsApp/push still
+ * fall back to a console log — no real adapter exists for those channels
+ * anywhere in this system (see research.md). `RESEND_API_KEY` is optional;
+ * unset, email degrades to a log instead of throwing.
+ */
+function makeNotifier(): NotificationPort {
+  return new RoutingNotifier(
+    new TwilioNotifier({
+      accountSid: env("TWILIO_ACCOUNT_SID"),
+      authToken: env("TWILIO_AUTH_TOKEN"),
+      from: env("TWILIO_FROM"),
+    }),
+    new ResendNotifier({
+      apiKey: process.env.RESEND_API_KEY,
+      from: process.env.RESEND_FROM ?? "CondoGATE <onboarding@resend.dev>",
+    }),
+    new ConsoleNotifier(),
+  );
+}
+
+/**
  * Build a SkillContext for a resident server action or component.
  *
  * - store: session client → RLS enforced (resident sees only their rows) —
@@ -52,7 +77,7 @@ export function makeServerContext(sessionClient: SupabaseClient): SkillContext {
     store: { ...sessionStore, events: serviceStore.events },
     sms: makeTwilioGateway(serviceClient),
     scheduler: new SupabaseScheduler(serviceClient),
-    notifier: new ConsoleNotifier(),
+    notifier: makeNotifier(),
   });
 }
 
@@ -68,6 +93,6 @@ export function makeSystemContext(): SkillContext {
     store: new SupabaseDataStore(serviceClient),
     sms: makeTwilioGateway(serviceClient),
     scheduler: new SupabaseScheduler(serviceClient),
-    notifier: new ConsoleNotifier(),
+    notifier: makeNotifier(),
   });
 }

@@ -50,6 +50,18 @@ export enum ResidentStatus {
   ERROR = "ERROR",
 }
 
+/**
+ * Lifecycle of an owner invitation (005) — the claim link that replaces
+ * manually running `update perfiles` to link an auth account to a resident.
+ * No CLAIMED->anything transition; expiry is a computed check against
+ * `expires_at`, not a stored state (research.md).
+ */
+export enum OwnerInvitationStatus {
+  PENDING = "PENDING",
+  CLAIMED = "CLAIMED",
+  INVALIDATED = "INVALIDATED",
+}
+
 /** Operational status of a Condominium. */
 export enum CondominiumStatus {
   ACTIVE = "ACTIVE",
@@ -89,6 +101,9 @@ export enum EventType {
   USER_UPDATED = "USER_UPDATED",
   PROPERTY_CREATED = "PROPERTY_CREATED",
   DEVICE_REGISTERED = "DEVICE_REGISTERED",
+  OWNER_INVITED = "OWNER_INVITED",
+  OWNER_INVITATION_CLAIMED = "OWNER_INVITATION_CLAIMED",
+  OWNER_INVITATION_INVALIDATED = "OWNER_INVITATION_INVALIDATED",
 }
 
 /** The kind of entity an Event refers to. */

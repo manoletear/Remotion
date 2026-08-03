@@ -5,7 +5,7 @@
  * Distinct from the SMS Gateway, which is reserved for RTU control traffic.
  */
 
-export type NotificationChannel = "PUSH" | "WHATSAPP" | "EMAIL";
+export type NotificationChannel = "PUSH" | "WHATSAPP" | "EMAIL" | "SMS";
 
 export interface NotificationMessage {
   channel: NotificationChannel;

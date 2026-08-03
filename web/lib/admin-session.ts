@@ -8,6 +8,8 @@ import { createSessionClient } from "./supabase";
 export interface CurrentAdmin {
   ctx: SkillContext;
   condominioId: string;
+  /** perfiles.id (== auth.users.id) of the acting admin — e.g. `inviteOwner`'s `invitedBy`. */
+  adminId: string;
   /**
    * The raw RLS-scoped session client — admin pages are pure read-only
    * reporting over data that spans several tables with no single
@@ -56,6 +58,7 @@ export async function getCurrentAdmin(): Promise<CurrentAdmin> {
   return {
     ctx: makeServerContext(supabase),
     condominioId: perfil.condominio_id,
+    adminId: user.id,
     supabase,
   };
 }

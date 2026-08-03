@@ -40,7 +40,7 @@ export interface Resident {
 }
 
 export type NewResident = Pick<Resident, "propiedad_id" | "nombre" | "telefono"> &
-  Partial<Pick<Resident, "apellido" | "avatar_url" | "tipo" | "rut" | "patente">>;
+  Partial<Pick<Resident, "apellido" | "avatar_url" | "tipo" | "rut" | "patente" | "estado">>;
 
 /**
  * Allowed state transitions for a permanent access-holder.

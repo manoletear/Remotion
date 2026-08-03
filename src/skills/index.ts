@@ -16,3 +16,5 @@ export * from "./household/add_employee.js";
 export * from "./household/remove_household_member.js";
 export * from "./pets/add_pet.js";
 export * from "./pets/remove_pet.js";
+export * from "./onboarding/invite_owner.js";
+export * from "./onboarding/claim_invitation.js";

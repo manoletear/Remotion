@@ -1,5 +1,6 @@
 import { statusBadge } from "@/lib/format";
 import { getCurrentAdmin } from "@/lib/admin-session";
+import { InviteOwnerForm } from "./invite-owner-form";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,8 @@ export default async function AdminPropiedades() {
     <main>
       <h1>Propiedades</h1>
       <p className="muted">Todas las propiedades del condominio y quién tiene acceso en cada una.</p>
+
+      <InviteOwnerForm propiedades={propiedades ?? []} />
 
       {!propiedades || propiedades.length === 0 ? (
         <div className="empty-state">

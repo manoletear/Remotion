@@ -18,13 +18,17 @@ import {
   CondominiumStatus,
   DeviceStatus,
   type InvitationStatus,
-  type ResidentStatus,
+  OwnerInvitationStatus,
+  ResidentStatus,
+  ResidentTipo,
 } from "../../shared/enums.js";
 import { RTU5024 } from "../../shared/constants.js";
 import type {
   DataStore,
   InvitationPatch,
+  NewOwnerInvitation,
   NewPet,
+  OwnerInvitation,
   Pet,
   ResidentPatch,
 } from "./port.js";
@@ -38,6 +42,8 @@ const TABLES = {
   invitations: "invitaciones",
   events: "eventos",
   pets: "mascotas",
+  ownerInvitations: "owner_invitations",
+  profiles: "perfiles",
 } as const;
 
 /** Unwrap a Supabase single-row response, throwing on error. */
@@ -96,8 +102,27 @@ export class SupabaseDataStore implements DataStore {
   };
 
   residents = {
+    // `estado` is computed here rather than left to the DB column default
+    // (migration 0006 defaults it to ACTIVE unconditionally) — FAMILIAR/
+    // EMPLEADO rows need to start PENDING_SYNC so syncAddPermanent's
+    // actionable-status check ever fires; relying on the column default was
+    // a latent bug (only the in-memory fake computed this correctly, so
+    // tests passed while the real adapter silently skipped RTU dispatch).
     create: async (input: NewResident): Promise<Resident> =>
-      single(await this.db.from(TABLES.residents).insert(input).select().single()),
+      single(
+        await this.db
+          .from(TABLES.residents)
+          .insert({
+            ...input,
+            estado:
+              input.estado ??
+              ((input.tipo ?? ResidentTipo.RESIDENT) === ResidentTipo.RESIDENT
+                ? ResidentStatus.ACTIVE
+                : ResidentStatus.PENDING_SYNC),
+          })
+          .select()
+          .single(),
+      ),
     get: async (id: string): Promise<Resident | null> =>
       maybeOne(await this.db.from(TABLES.residents).select().eq("id", id).maybeSingle()),
     listByProperty: async (propiedadId: string): Promise<Resident[]> =>
@@ -219,6 +244,70 @@ export class SupabaseDataStore implements DataStore {
     delete: async (id: string): Promise<void> => {
       const res = await this.db.from(TABLES.pets).delete().eq("id", id);
       if (res.error) throw new Error(res.error.message);
+    },
+  };
+
+  ownerInvitations = {
+    create: async (
+      input: NewOwnerInvitation,
+      tokenHash: string,
+      expiresAt: string,
+    ): Promise<OwnerInvitation> => {
+      // Invalidate any prior PENDING invitation for this resident first — the
+      // partial unique index (owner_invitations_one_pending_per_resident)
+      // would otherwise reject the insert below (research.md).
+      const invalidated = await this.db
+        .from(TABLES.ownerInvitations)
+        .update({ status: OwnerInvitationStatus.INVALIDATED })
+        .eq("resident_id", input.resident_id)
+        .eq("status", OwnerInvitationStatus.PENDING);
+      if (invalidated.error) throw new Error(invalidated.error.message);
+
+      return single(
+        await this.db
+          .from(TABLES.ownerInvitations)
+          .insert({
+            resident_id: input.resident_id,
+            channel_email: input.channel_email,
+            channel_phone: input.channel_phone,
+            invited_by: input.invited_by,
+            token_hash: tokenHash,
+            expires_at: expiresAt,
+            status: OwnerInvitationStatus.PENDING,
+          })
+          .select()
+          .single(),
+      );
+    },
+    findByTokenHash: async (tokenHash: string): Promise<OwnerInvitation | null> =>
+      maybeOne(
+        await this.db.from(TABLES.ownerInvitations).select().eq("token_hash", tokenHash).maybeSingle(),
+      ),
+    claim: async (id: string, claimedBy: string, now: string): Promise<OwnerInvitation | null> =>
+      maybeOne(
+        await this.db
+          .from(TABLES.ownerInvitations)
+          .update({ status: OwnerInvitationStatus.CLAIMED, claimed_at: now, claimed_by: claimedBy })
+          .eq("id", id)
+          .eq("status", OwnerInvitationStatus.PENDING)
+          .gt("expires_at", now)
+          .select()
+          .maybeSingle(),
+      ),
+  };
+
+  profiles = {
+    linkResident: async (authUserId: string, residentId: string): Promise<void> => {
+      const res = await this.db
+        .from(TABLES.profiles)
+        .insert({ id: authUserId, residente_id: residentId, rol: "RESIDENT" });
+      if (res.error) throw new Error(res.error.message);
+    },
+    isLinked: async (residentId: string): Promise<boolean> => {
+      const rows = many<{ id: string }>(
+        await this.db.from(TABLES.profiles).select("id").eq("residente_id", residentId).limit(1),
+      );
+      return rows.length > 0;
     },
   };
 }

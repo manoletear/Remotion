@@ -4,7 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 // /api routes are system endpoints (cron tick, Twilio webhook) — they
 // authenticate themselves (CRON_SECRET / Twilio signature), not via resident
 // session, so they must not be redirected to /login by this middleware.
-const PUBLIC_PATHS = ["/login", "/auth", "/api"];
+const PUBLIC_PATHS = ["/login", "/auth", "/api", "/reclamar"];
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });

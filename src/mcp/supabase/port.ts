@@ -12,7 +12,7 @@ import type {
   Property,
   Resident,
 } from "../../domain/index.js";
-import type { InvitationStatus, ResidentStatus } from "../../shared/enums.js";
+import type { InvitationStatus, OwnerInvitationStatus, ResidentStatus } from "../../shared/enums.js";
 
 /**
  * Persistence port (Supabase MCP).
@@ -143,6 +143,56 @@ export interface PetRepository {
   delete(id: string): Promise<void>;
 }
 
+/**
+ * A claim link (specs/005-owner-onboarding) that replaces manually running
+ * `update perfiles` to link an auth account to a resident. `token_hash`, not
+ * the raw token, is ever persisted (research.md) — the raw token exists only
+ * in the URL sent to the owner and the request that claims it.
+ */
+export interface OwnerInvitation {
+  id: string;
+  resident_id: string;
+  token_hash: string;
+  channel_email: string | null;
+  channel_phone: string | null;
+  status: OwnerInvitationStatus;
+  expires_at: string;
+  claimed_at: string | null;
+  claimed_by: string | null;
+  invited_by: string;
+  created_at: string;
+}
+
+export type NewOwnerInvitation = Pick<
+  OwnerInvitation,
+  "resident_id" | "channel_email" | "channel_phone" | "invited_by"
+>;
+
+export interface OwnerInvitationRepository {
+  /** Creates the invitation, invalidating any prior PENDING one for the same
+   *  resident_id (research.md — at most one valid link per pending owner). */
+  create(input: NewOwnerInvitation, tokenHash: string, expiresAt: string): Promise<OwnerInvitation>;
+  /** The only way this repository is ever queried by the claim flow. */
+  findByTokenHash(tokenHash: string): Promise<OwnerInvitation | null>;
+  /** Atomic conditional claim (research.md) — null if the row wasn't PENDING
+   *  and unexpired at the moment of the call. */
+  claim(id: string, claimedBy: string, now: string): Promise<OwnerInvitation | null>;
+}
+
+/**
+ * The auth-user <-> resident link (`perfiles`, migration 0004). Historically
+ * written by hand (`update perfiles set residente_id = ...`) — this is the
+ * first skill-level need for it, added by 005 for the claim step. Only what
+ * the claim flow needs; not a general profile CRUD surface.
+ */
+export interface ProfileRepository {
+  linkResident(authUserId: string, residentId: string): Promise<void>;
+  /** True once some auth account has been linked to this resident — the
+   *  actual "claimed" signal `inviteOwner` uses to tell a re-invite of a
+   *  still-pending owner apart from a genuinely already-registered one. */
+  isLinked(residentId: string): Promise<boolean>;
+}
+
 /** Aggregate of all repositories — the unit injected into skills. */
 export interface DataStore {
   condominiums: CondominiumRepository;
@@ -152,4 +202,6 @@ export interface DataStore {
   invitations: InvitationRepository;
   events: EventRepository;
   pets: PetRepository;
+  ownerInvitations: OwnerInvitationRepository;
+  profiles: ProfileRepository;
 }

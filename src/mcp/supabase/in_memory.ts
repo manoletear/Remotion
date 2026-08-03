@@ -16,6 +16,7 @@ import {
   CondominiumStatus,
   DeviceStatus,
   InvitationStatus,
+  OwnerInvitationStatus,
   ResidentStatus,
   ResidentTipo,
 } from "../../shared/enums.js";
@@ -24,10 +25,17 @@ import { newId, nowIso } from "../../shared/utils.js";
 import type {
   DataStore,
   InvitationPatch,
+  NewOwnerInvitation,
   NewPet,
+  OwnerInvitation,
   Pet,
   ResidentPatch,
 } from "./port.js";
+
+interface InMemoryProfile {
+  id: string;
+  residente_id: string;
+}
 
 /**
  * In-memory implementation of the persistence port. Used by tests and the
@@ -42,6 +50,8 @@ export class InMemoryDataStore implements DataStore {
   private readonly _invitations = new Map<string, Invitation>();
   private readonly _events: Event[] = [];
   private readonly _pets = new Map<string, Pet>();
+  private readonly _ownerInvitations = new Map<string, OwnerInvitation>();
+  private readonly _profiles = new Map<string, InMemoryProfile>();
 
   /** Resolve the device serving a property (property -> condominium -> device). */
   private deviceForProperty(propiedadId: string): Device | null {
@@ -97,9 +107,10 @@ export class InMemoryDataStore implements DataStore {
         rut: input.rut ?? null,
         patente: input.patente ?? null,
         estado:
-          (input.tipo ?? ResidentTipo.RESIDENT) === ResidentTipo.RESIDENT
+          input.estado ??
+          ((input.tipo ?? ResidentTipo.RESIDENT) === ResidentTipo.RESIDENT
             ? ResidentStatus.ACTIVE
-            : ResidentStatus.PENDING_SYNC,
+            : ResidentStatus.PENDING_SYNC),
         dispositivo_id: null,
         rtu_slot: null,
         sent_at: null,
@@ -255,6 +266,69 @@ export class InMemoryDataStore implements DataStore {
     },
     delete: async (id: string) => {
       this._pets.delete(id);
+    },
+  };
+
+  ownerInvitations = {
+    create: async (
+      input: NewOwnerInvitation,
+      tokenHash: string,
+      expiresAt: string,
+    ): Promise<OwnerInvitation> => {
+      // At most one valid link per pending owner (research.md) — mirrors the
+      // DB's partial unique index so the fake proves the same guarantee.
+      for (const inv of this._ownerInvitations.values()) {
+        if (inv.resident_id === input.resident_id && inv.status === OwnerInvitationStatus.PENDING) {
+          this._ownerInvitations.set(inv.id, { ...inv, status: OwnerInvitationStatus.INVALIDATED });
+        }
+      }
+      const row: OwnerInvitation = {
+        id: newId(),
+        resident_id: input.resident_id,
+        token_hash: tokenHash,
+        channel_email: input.channel_email ?? null,
+        channel_phone: input.channel_phone ?? null,
+        status: OwnerInvitationStatus.PENDING,
+        expires_at: expiresAt,
+        claimed_at: null,
+        claimed_by: null,
+        invited_by: input.invited_by,
+        created_at: nowIso(),
+      };
+      this._ownerInvitations.set(row.id, row);
+      return row;
+    },
+    findByTokenHash: async (tokenHash: string) => {
+      for (const inv of this._ownerInvitations.values()) {
+        if (inv.token_hash === tokenHash) return inv;
+      }
+      return null;
+    },
+    claim: async (id: string, claimedBy: string, now: string): Promise<OwnerInvitation | null> => {
+      const current = this._ownerInvitations.get(id);
+      if (!current) return null;
+      if (current.status !== OwnerInvitationStatus.PENDING) return null;
+      if (current.expires_at <= now) return null;
+      const next: OwnerInvitation = {
+        ...current,
+        status: OwnerInvitationStatus.CLAIMED,
+        claimed_at: now,
+        claimed_by: claimedBy,
+      };
+      this._ownerInvitations.set(id, next);
+      return next;
+    },
+  };
+
+  profiles = {
+    linkResident: async (authUserId: string, residentId: string): Promise<void> => {
+      this._profiles.set(authUserId, { id: authUserId, residente_id: residentId });
+    },
+    isLinked: async (residentId: string): Promise<boolean> => {
+      for (const p of this._profiles.values()) {
+        if (p.residente_id === residentId) return true;
+      }
+      return false;
     },
   };
 }

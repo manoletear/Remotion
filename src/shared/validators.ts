@@ -68,6 +68,16 @@ export class Validator {
     return normalized;
   }
 
+  /** Validate a simple email format, or record an issue. Returns it trimmed/lowercased. */
+  email(value: string, field: string): string | null {
+    const normalized = value.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+      this.issues.push(`${field} is not a valid email: "${value}"`);
+      return null;
+    }
+    return normalized;
+  }
+
   /** Validate and return a normalized RUT, or record an issue. */
   rut(value: string, field: string): string | null {
     const normalized = normalizeRut(value);

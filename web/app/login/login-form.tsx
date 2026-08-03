@@ -5,7 +5,7 @@ import { useActionState } from "react";
 import { SubmitButton } from "../components/submit-button";
 import { sendMagicLinkAction, type LoginState } from "./actions";
 
-export function LoginForm({ initialError }: { initialError?: string }) {
+export function LoginForm({ initialError, next }: { initialError?: string; next?: string }) {
   const [state, formAction] = useActionState(sendMagicLinkAction, {
     error: initialError,
   });
@@ -26,6 +26,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
       <h1>Acceso al portal</h1>
       <p className="muted">Ingresa tu correo y te enviaremos un enlace para entrar.</p>
       <form action={formAction}>
+        {next && <input type="hidden" name="next" value={next} />}
         <div className="field">
           <label htmlFor="email">Correo electrónico</label>
           <input
