@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 
 import { defaultDateParts } from "@/lib/format";
 import { SubmitButton } from "./components/submit-button";
@@ -47,9 +47,19 @@ const initialState: ActionState = {};
  *  while pending and an inline error on failure (FR-002, FR-003). */
 export function NewInvitationForm() {
   const [state, formAction] = useActionState(crearInvitacionAction, initialState);
+  const tzOffsetRef = useRef<HTMLInputElement>(null);
+
+  // Set on mount, not via defaultValue: SSR runs in the server's timezone
+  // (UTC on Vercel), so a value baked into the initial render would be wrong
+  // until hydration — and defaultValue on an uncontrolled input doesn't
+  // update on hydration anyway.
+  useEffect(() => {
+    if (tzOffsetRef.current) tzOffsetRef.current.value = String(new Date().getTimezoneOffset());
+  }, []);
 
   return (
     <form action={formAction}>
+      <input ref={tzOffsetRef} type="hidden" name="tz_offset_minutes" defaultValue="0" />
       <div className="grid2">
         <div className="field">
           <label htmlFor="nombre">Visitante</label>

@@ -15,16 +15,24 @@ export interface ActionState {
  * dropdown-based time picker in the "new invitation" form) into ISO 8601.
  * Avoids relying on a native `datetime-local` AM/PM spinner, which is fiddly
  * across browsers/locales.
+ *
+ * Uses the browser's timezone offset (sent as a hidden field, since the
+ * date/hour/minute values are wall-clock time *in the browser's timezone*)
+ * rather than `new Date(y, m, d, h, mi)`, which would construct the date in
+ * the server's timezone instead — wrong on Vercel, which runs in UTC, and
+ * silently wrong by exactly that offset for anyone not in UTC.
  */
 function toIso(formData: FormData, prefix: "inicio" | "fin"): string {
   const fecha = String(formData.get(`${prefix}_fecha`) ?? "");
   const hora12 = Number(formData.get(`${prefix}_hora`));
   const minuto = Number(formData.get(`${prefix}_min`));
   const ampm = String(formData.get(`${prefix}_ampm`) ?? "AM");
+  const tzOffsetMinutes = Number(formData.get("tz_offset_minutes") ?? 0);
 
   const hora24 = (hora12 % 12) + (ampm === "PM" ? 12 : 0);
   const [year, month, day] = fecha.split("-").map(Number);
-  return new Date(year!, month! - 1, day!, hora24, minuto).toISOString();
+  const utcMs = Date.UTC(year!, month! - 1, day!, hora24, minuto) + tzOffsetMinutes * 60_000;
+  return new Date(utcMs).toISOString();
 }
 
 export async function crearInvitacionAction(
