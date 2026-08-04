@@ -2,16 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentResident } from "@/lib/session";
 import { createServiceClient } from "@/lib/supabase";
-
-const MAX_BYTES = 5 * 1024 * 1024; // 5MB
-const ALLOWED_TYPES: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
+import { petPhotoPath, validatePetPhoto } from "@/lib/pet-photo";
 
 /**
- * Pet photo upload (specs/003-household-permanent-access, FR-011).
+ * Pet photo upload for an *existing* pet (specs/003-household-permanent-access,
+ * FR-011) — adding or replacing a photo after creation. For creating a pet
+ * with its photo in one step, see `/api/pets` instead.
  *
  * Thin server-side proxy, not direct client->Storage (research.md): validates
  * size/format with specific error messages, then writes to the
@@ -34,21 +30,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Mascota no encontrada." }, { status: 404 });
   }
 
-  if (photo.size > MAX_BYTES) {
-    return NextResponse.json(
-      { error: "La foto no puede superar 5MB." },
-      { status: 400 },
-    );
-  }
-  const ext = ALLOWED_TYPES[photo.type];
-  if (!ext) {
-    return NextResponse.json(
-      { error: "Formato no soportado, usa JPG, PNG o WEBP." },
-      { status: 400 },
-    );
+  const validated = validatePetPhoto(photo);
+  if ("error" in validated) {
+    return NextResponse.json({ error: validated.error }, { status: 400 });
   }
 
-  const path = `${propertyId}/${petId}.${ext}`;
+  const path = petPhotoPath(propertyId, petId, validated.ext);
   const buffer = Buffer.from(await photo.arrayBuffer());
   const { error: uploadError } = await createServiceClient()
     .storage.from("mascotas-fotos")

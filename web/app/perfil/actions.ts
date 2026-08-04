@@ -3,7 +3,6 @@
 import {
   addEmployee,
   addFamilyMember,
-  addPet,
   removeHouseholdMember,
   removePet,
 } from "gsm-gate-access-layer";
@@ -71,26 +70,6 @@ export async function removerMiembroAction(formData: FormData): Promise<void> {
 
   await removeHouseholdMember(ctx, id);
   revalidatePath("/perfil");
-}
-
-export async function agregarMascotaAction(
-  _prevState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  try {
-    const { ctx, propertyId } = await getCurrentResident();
-    await addPet(ctx, {
-      propiedad_id: propertyId,
-      nombre: String(formData.get("nombre") ?? "").trim(),
-    });
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("agregarMascotaAction failed:", error);
-    const message = error instanceof Error ? error.message : "Error desconocido.";
-    return { error: `No se pudo agregar: ${message}` };
-  }
-  revalidatePath("/perfil");
-  return {};
 }
 
 export async function removerMascotaAction(formData: FormData): Promise<void> {
